@@ -1,0 +1,114 @@
+# OS and temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.temp
+*.log
+*.class
+*.pyc
+*.swp
+*.swo
+.history/
+.svn/
+.atom/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.provisionprofile
+
+# Flutter / Dart / Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+migrate_working_dir/
+
+# Flutter symbolication and obfuscation output
+app.*.symbols
+app.*.map.json
+
+# IDE and editor files
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Keep this commented if shared VS Code settings should be committed.
+# .vscode/
+
+# Android generated files, local config, and signing keys
+/android/.gradle/
+/android/.cxx/
+/android/captures/
+/android/local.properties
+/android/GeneratedPluginRegistrant.java
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+/android/app/build/
+key.properties
+**/*.jks
+**/*.keystore
+
+# Firebase or service config files that can contain project credentials.
+# Commit example/template files instead when needed.
+google-services.json
+GoogleService-Info.plist
+firebase_app_id_file.json
+
+# iOS and macOS generated files
+**/Flutter/ephemeral/
+**/.symlinks/
+**/Pods/
+**/DerivedData/
+**/xcuserdata/
+**/*.xcuserstate
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Xcode user files
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+profile
+
+# Linux / Windows desktop generated files and build output
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+linux/build/
+windows/build/
+
+# Visual Studio user and cache files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.[Cc]ache
+!*.[Cc]ache/
+x64/
+x86/
