@@ -1,4 +1,4 @@
-name: lg-rpg-controller
+name: lg_rpg_controller
 description: "A production-ready Controller for Liquid Galaxy RPG game "
 publish_to: 'none'
 version: 1.0.0+1
