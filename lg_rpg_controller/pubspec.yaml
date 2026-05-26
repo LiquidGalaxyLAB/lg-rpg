@@ -1,0 +1,44 @@
+name: lg-rpg-controller
+description: "A production-ready Controller for Liquid Galaxy RPG game "
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_riverpod: ^2.5.1
+
+  dartssh2: ^2.10.0
+
+  flutter_secure_storage: ^10.0.0
+  shared_preferences: ^2.2.3
+  flutter_dotenv: ^6.0.0
+
+  socket_io_client: ^2.0.3+1
+
+  mobile_scanner: ^7.0.0
+  permission_handler: ^12.0.1
+
+  uuid: ^4.4.0
+  equatable: ^2.0.5
+  logger: ^2.6.2
+
+  cupertino_icons: ^1.0.6
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mockito: ^5.4.4
+  build_runner: ^2.4.9
+
+flutter:
+  uses-material-design: true
+  
