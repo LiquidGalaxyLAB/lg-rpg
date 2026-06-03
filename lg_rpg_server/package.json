@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "nodemon server.js",
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "phaser": "^4.1.0",
-    "socket.io": "^4.8.3",
-    "better-sqlite3": "^8.7.0",
     "cors": "^2.8.5",
-    "qrcode": "^1.5.4"
-}
+    "dotenv": "^17.4.2",
+    "easystarjs": "^0.4.4",
+    "express": "^4.19.2",
+    "lowdb": "^6.1.1",
+    "phaser": "^4.1.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
 }
