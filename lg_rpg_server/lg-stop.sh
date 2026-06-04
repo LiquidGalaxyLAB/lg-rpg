@@ -15,7 +15,7 @@ else
 fi
 
 # 2. Kill local kiosk browser
-pkill -f "chromium-browser" 2>/dev/null || true
+pkill -TERM -f 'chromium-browser|chromium|chrome' 2>/dev/null || true
 echo "   ✅ Local browser stopped on lg1."
 
 # 3. Kill remote kiosk browsers on slave hosts
@@ -24,7 +24,7 @@ for ((i=1; i<=TOTAL_SCREENS; i++)); do
   if [ "$i" -ne 1 ]; then
     SLAVE="lg${i}"
     echo "      📡 Stopping browser on $SLAVE via SSH..."
-    sshpass -p 'lg' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 "lg@${SLAVE}" "pkill -f chromium-browser" 2>/dev/null || true
+    sshpass -p 'lg' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "lg@${SLAVE}" "pkill -TERM -f 'chromium-browser|chromium|chrome'; sleep 1; pgrep -af 'chromium|chrome' || echo stopped" || echo "Could not SSH to ${SLAVE}"
   fi
 done
 
