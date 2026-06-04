@@ -1,4 +1,6 @@
-class FlyToEntity {
+import 'package:equatable/equatable.dart';
+
+class FlyToEntity extends Equatable {
   final double latitude;
   final double longitude;
   final double altitude;
@@ -17,28 +19,32 @@ class FlyToEntity {
     this.altitudeMode = 'relativeToGround',
   });
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-
-    return other is FlyToEntity &&
-        other.latitude == latitude &&
-        other.longitude == longitude &&
-        other.altitude == altitude &&
-        other.range == range &&
-        other.tilt == tilt &&
-        other.heading == heading &&
-        other.altitudeMode == altitudeMode;
+  FlyToEntity copyWith(
+      {double? latitude,
+      double? longitude,
+      double? altitude,
+      double? range,
+      double? tilt,
+      double? heading,
+      String? altitudeMode}) {
+    return FlyToEntity(
+        latitude: latitude ?? this.latitude,
+        longitude: longitude ?? this.longitude,
+        altitude: altitude ?? this.altitude,
+        range: range ?? this.range,
+        tilt: tilt ?? this.tilt,
+        heading: heading ?? this.heading,
+        altitudeMode: altitudeMode ?? this.altitudeMode);
   }
 
   @override
-  int get hashCode {
-    return latitude.hashCode ^
-        longitude.hashCode ^
-        altitude.hashCode ^
-        range.hashCode ^
-        tilt.hashCode ^
-        heading.hashCode ^
-        altitudeMode.hashCode;
-  }
+  List<Object?> get props => [
+        latitude,
+        longitude,
+        altitude,
+        range,
+        tilt,
+        heading,
+        altitudeMode,
+      ];
 }

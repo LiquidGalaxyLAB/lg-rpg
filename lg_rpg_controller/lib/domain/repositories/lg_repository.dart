@@ -57,4 +57,7 @@ abstract class LGRepository {
 
   /// Force refresh a specific screen by toggling refresh interval.
   Future<void> forceRefresh(int screenNumber);
+
+  Future<void> stopServer();
+  Future<void> startServer();
 }

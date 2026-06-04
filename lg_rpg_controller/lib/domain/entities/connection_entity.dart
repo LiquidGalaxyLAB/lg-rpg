@@ -1,4 +1,6 @@
-class ConnectionEntity {
+import 'package:equatable/equatable.dart';
+
+class ConnectionEntity extends Equatable {
   final String ip;
   final String username;
   final String password;
@@ -32,4 +34,14 @@ class ConnectionEntity {
       isConnected: isConnected ?? this.isConnected,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        ip,
+        port,
+        username,
+        password,
+        screenNumber,
+        isConnected,
+      ];
 }

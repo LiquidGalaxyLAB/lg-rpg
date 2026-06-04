@@ -1,4 +1,6 @@
-class PermissionEntity {
+import 'package:equatable/equatable.dart';
+
+class PermissionEntity extends Equatable {
   final bool isLocationGranted;
   final bool isRequesting;
 
@@ -16,4 +18,7 @@ class PermissionEntity {
       isRequesting: isRequesting ?? this.isRequesting,
     );
   }
+
+  @override
+  List<Object?> get props => [isLocationGranted, isRequesting];
 }
