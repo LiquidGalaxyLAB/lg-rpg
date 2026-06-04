@@ -1,6 +1,6 @@
-/// Represents parameters for an orbit animation around a point of interest.
-/// Used by the LG Orbit service to generate KML Tours.
-class OrbitEntity {
+import 'package:equatable/equatable.dart';
+
+class OrbitEntity extends Equatable {
   final double latitude;
   final double longitude;
   final double altitude;
@@ -43,27 +43,13 @@ class OrbitEntity {
   }
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-
-    return other is OrbitEntity &&
-        other.latitude == latitude &&
-        other.longitude == longitude &&
-        other.altitude == altitude &&
-        other.range == range &&
-        other.tilt == tilt &&
-        other.heading == heading &&
-        other.duration == duration;
-  }
-
-  @override
-  int get hashCode {
-    return latitude.hashCode ^
-        longitude.hashCode ^
-        altitude.hashCode ^
-        range.hashCode ^
-        tilt.hashCode ^
-        heading.hashCode ^
-        duration.hashCode;
-  }
+  List<Object?> get props => [
+        latitude,
+        longitude,
+        altitude,
+        range,
+        tilt,
+        heading,
+        duration,
+      ];
 }

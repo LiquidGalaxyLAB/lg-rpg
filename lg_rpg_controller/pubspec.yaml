@@ -28,6 +28,8 @@ dependencies:
   logger: ^2.6.2
 
   cupertino_icons: ^1.0.6
+  flutter_joystick: ^0.2.2
+  circular_menu: ^4.0.0
 
 
 dev_dependencies:
@@ -41,4 +43,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
