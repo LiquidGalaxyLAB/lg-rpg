@@ -41,14 +41,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final connectionState = ref.watch(connectionProvider);
     final lgRepositoryState = ref.watch(lgRepositoryProvider);
-    final orientation = MediaQuery.of(context).orientation;
 
     InputDecoration fieldDecoration(String label, String hint) {
       return InputDecoration(
         labelText: label,
         hintText: hint,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        border: const OutlineInputBorder(),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       );
     }
 
@@ -56,159 +57,155 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return Row(
         children: [
           Expanded(child: left),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(child: right),
         ],
       );
     }
 
-    return Scaffold(body: SafeArea(child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-      if (orientation == Orientation.landscape) {
-        return SingleChildScrollView(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Enter Details'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
-            48,
-            64,
-            104,
-            MediaQuery.of(context).viewInsets.bottom + 16,
+            24,
+            24,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    fieldRow(
-                      TextField(
-                        controller: _portController,
-                        keyboardType: TextInputType.number,
-                        decoration: fieldDecoration('Port', '22'),
-                      ),
-                      TextField(
-                        controller: _usernameController,
-                        decoration: fieldDecoration('Username', 'lg'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    fieldRow(
-                      TextField(
-                        controller: _passwordController,
-                        decoration: fieldDecoration('Password', 'lg'),
-                      ),
-                      TextField(
-                        controller: _ipController,
-                        keyboardType: TextInputType.number,
-                        decoration: fieldDecoration('IP Address', '192.34.4.0'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    fieldRow(
-                      TextField(
-                        controller: _screenNumberController,
-                        keyboardType: TextInputType.number,
-                        decoration: fieldDecoration('Screen Number', '3'),
-                      ),
-                      const SizedBox.shrink(),
-                    ),
-                  ],
+              // --- FORM SECTION ---
+              TextField(
+                controller: _ipController,
+                keyboardType: TextInputType.number,
+                decoration: fieldDecoration('IP Address', '192.34.4.0'),
+              ),
+              const SizedBox(height: 16),
+              fieldRow(
+                TextField(
+                  controller: _portController,
+                  keyboardType: TextInputType.number,
+                  decoration: fieldDecoration('Port', '22'),
+                ),
+                TextField(
+                  controller: _screenNumberController,
+                  keyboardType: TextInputType.number,
+                  decoration: fieldDecoration('Screen Number', '3'),
                 ),
               ),
-              const SizedBox(width: 32),
-              SizedBox(
-                width: 170,
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ElevatedButton(
-                        onPressed: connectionState.isConnected
-                            ? null
-                            : () async {
-                                final notifier =
-                                    ref.read(connectionProvider.notifier);
-                                notifier.setIp(_ipController.text);
-                                notifier.setPort(
-                                  int.parse(_portController.text),
-                                );
-                                notifier.setUsername(_usernameController.text);
-                                notifier.setPassword(_passwordController.text);
-                                await notifier.setScreenNumber(
-                                  int.parse(_screenNumberController.text),
-                                );
-                                if (!context.mounted) return;
-                                try {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Connecting to Liquid Galaxy')),
-                                  );
+              const SizedBox(height: 16),
+              fieldRow(
+                TextField(
+                  controller: _usernameController,
+                  decoration: fieldDecoration('Username', 'lg'),
+                ),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: fieldDecoration('Password', 'lg'),
+                ),
+              ),
 
-                                  await notifier.connect();
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Connected successfully!')),
-                                  );
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                        content: Text('Failed to connect: $e')),
-                                  );
-                                }
-                              },
-                        child: const Text('Connect'),
-                      ),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                          onPressed: !connectionState.isConnected
-                              ? null
-                              : () async {
-                                  await ref
-                                      .read(connectionProvider.notifier)
-                                      .disconnect();
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Disconnected!')),
-                                  );
-                                },
-                          child: const Text('Disconnect')),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                          onPressed: !connectionState.isConnected
-                              ? null
-                              : () async {
-                                  await lgRepositoryState.startServer();
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Server Started!')),
-                                  );
-                                },
-                          child: const Text('Start the Server')),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                          onPressed: !connectionState.isConnected
-                              ? null
-                              : () async {
-                                  await lgRepositoryState.stopServer();
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Server Stopped!')),
-                                  );
-                                },
-                          child: const Text('Stop the Server')),
-                    ]),
+              const SizedBox(height: 48),
+
+              // --- BUTTONS SECTION ---
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: connectionState.isConnected
+                    ? null
+                    : () async {
+                        final notifier = ref.read(connectionProvider.notifier);
+                        notifier.setIp(_ipController.text);
+                        notifier.setPort(int.parse(_portController.text));
+                        notifier.setUsername(_usernameController.text);
+                        notifier.setPassword(_passwordController.text);
+                        await notifier.setScreenNumber(
+                          int.parse(_screenNumberController.text),
+                        );
+                        if (!context.mounted) return;
+                        try {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Connecting to Liquid Galaxy')),
+                          );
+
+                          await notifier.connect();
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Connected successfully!')),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to connect: $e')),
+                          );
+                        }
+                      },
+                child: const Text('Connect'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: !connectionState.isConnected
+                    ? null
+                    : () async {
+                        await ref
+                            .read(connectionProvider.notifier)
+                            .disconnect();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Disconnected!')),
+                        );
+                      },
+                child: const Text('Disconnect'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: !connectionState.isConnected
+                    ? null
+                    : () async {
+                        await lgRepositoryState.startServer();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Server Started!')),
+                        );
+                      },
+                child: const Text('Start the Server'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.red.shade100, // Visual cue for stop
+                  foregroundColor: Colors.red.shade900,
+                ),
+                onPressed: !connectionState.isConnected
+                    ? null
+                    : () async {
+                        await lgRepositoryState.stopServer();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Server Stopped!')),
+                        );
+                      },
+                child: const Text('Stop the Server'),
               ),
             ],
           ),
-        );
-      }
-      return const Center(
-        child: Text('Please rotate your device to landscape mode.'),
-      );
-    })));
+        ),
+      ),
+    );
   }
 }
