@@ -132,9 +132,44 @@
          "width":135,
          "x":0,
          "y":0
+        }, 
+        {
+         "id":2,
+         "layers":[
+                {
+                 "draworder":"topdown",
+                 "id":3,
+                 "locked":true,
+                 "name":"water_priestess",
+                 "objects":[
+                        {
+                         "gid":573,
+                         "height":128,
+                         "id":1,
+                         "name":"",
+                         "opacity":1,
+                         "rotation":0,
+                         "type":"",
+                         "visible":true,
+                         "width":288,
+                         "x":593.333333333333,
+                         "y":1114.66666666667
+                        }],
+                 "opacity":1,
+                 "type":"objectgroup",
+                 "visible":true,
+                 "x":0,
+                 "y":0
+                }],
+         "name":"players",
+         "opacity":1,
+         "type":"group",
+         "visible":true,
+         "x":0,
+         "y":0
         }],
- "nextlayerid":2,
- "nextobjectid":1,
+ "nextlayerid":4,
+ "nextobjectid":2,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",
@@ -198,6 +233,19 @@
                          "wangid":[0, 1, 1, 1, 1, 1, 0, 0]
                         }]
                 }]
+        }, 
+        {
+         "columns":32,
+         "firstgid":573,
+         "image":"..\/players\/cherit\/water_priestess_288x128.png",
+         "imageheight":1920,
+         "imagewidth":9216,
+         "margin":0,
+         "name":"water_priestess_288x128",
+         "spacing":0,
+         "tilecount":480,
+         "tileheight":128,
+         "tilewidth":288
         }],
  "tilewidth":16,
  "type":"map",
