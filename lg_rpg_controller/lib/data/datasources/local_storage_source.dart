@@ -12,6 +12,7 @@ class LocalStorageDataSource {
   static const _keyPort = 'lg_port';
   static const _keyScreens = 'lg_screens';
   static const _keyPlayerToken = 'player_token';
+  static const _keyPlayerName = 'player_name';
 
   Future<void> saveSettings(ConnectionEntity connection) async {
     await _storage.write(key: _keyIp, value: connection.ip);
@@ -55,5 +56,13 @@ class LocalStorageDataSource {
 
   Future<String?> getPlayerToken() async {
     return await _storage.read(key: _keyPlayerToken);
+  }
+
+  Future<void> savePlayerName(String name) async {
+    await _storage.write(key: _keyPlayerName, value: name);
+  }
+
+  Future<String?> getPlayerName() async {
+    return await _storage.read(key: _keyPlayerName);
   }
 }

@@ -18,13 +18,15 @@ abstract class GameServerRepository {
 
   Future<void> disconnectFromServer();
 
-  Future<void> joinLobby(String lobbyCode);
+  Future<void> joinLobby({String name = 'Player'});
 
-  Future<void> leaveLobby(String lobbyId);
+  Future<void> leaveLobby();
 
-  Future<void> reallocateTeam(String playerId, String teamName);
+  Future<void> startGame();
 
-  Future<void> startGame(String lobbyId);
+  Future<void> endGame();
 
-  Future<void> endGame(String lobbyId);
+  Future<void> movePlayer(double dx, double dy);
+
+  Future<void> selectGameMode(String mode);
 }

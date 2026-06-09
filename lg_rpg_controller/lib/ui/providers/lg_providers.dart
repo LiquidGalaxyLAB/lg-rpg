@@ -50,3 +50,12 @@ final sendLogoUseCaseProvider = Provider<SendLogoUseCase>((ref) {
   final repository = ref.watch(lgRepositoryProvider);
   return SendLogoUseCase(repository);
 });
+
+final launchBrowserUseCaseProvider = Provider<LaunchBrowserUseCase>((ref) {
+  final repository = ref.watch(lgRepositoryProvider);
+  return LaunchBrowserUseCase(repository);
+});
+final closeBrowserUseCaseProvider = Provider<CloseBrowserUseCase>((ref) {
+  final repository = ref.watch(lgRepositoryProvider);
+  return CloseBrowserUseCase(repository);
+});

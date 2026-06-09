@@ -55,3 +55,17 @@ class CleanLogoUseCase {
 
   Future<void> call() => repository.cleanLogo();
 }
+
+class LaunchBrowserUseCase {
+  final LGRepository repository;
+  LaunchBrowserUseCase(this.repository);
+
+  Future<void> call() => repository.launchBrowser();
+}
+
+class CloseBrowserUseCase {
+  final LGRepository repository;
+  CloseBrowserUseCase(this.repository);
+
+  Future<void> call() => repository.closeBrowser();
+}
