@@ -1,0 +1,51 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lg_rpg_controller/core/di/injection_container.dart';
+import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
+import 'package:lg_rpg_controller/domain/usecases/game_server_control.dart';
+export '../../core/di/injection_container.dart'
+    show gameServerRepositoryProvider;
+
+final initGameServerTokenUseCaseProvider =
+    Provider<InitGameServerTokenUseCase>((ref) {
+  return InitGameServerTokenUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
+final connectToGameServerUseCaseProvider =
+    Provider<ConnectToGameServerUseCase>((ref) {
+  return ConnectToGameServerUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
+final connectAndJoinLobbyUseCaseProvider =
+    Provider<ConnectAndJoinLobbyUseCase>((ref) {
+  return ConnectAndJoinLobbyUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
+final disconnectFromGameServerUseCaseProvider =
+    Provider<DisconnectFromGameServerUseCase>((ref) {
+  return DisconnectFromGameServerUseCase(
+      ref.watch(gameServerRepositoryProvider));
+});
+final joinLobbyUseCaseProvider = Provider<JoinLobbyUseCase>((ref) {
+  return JoinLobbyUseCase(ref.watch(gameServerRepositoryProvider));
+});
+final leaveLobbyUseCaseProvider = Provider<LeaveLobbyUseCase>((ref) {
+  return LeaveLobbyUseCase(ref.watch(gameServerRepositoryProvider));
+});
+final startGameUseCaseProvider = Provider<StartGameUseCase>((ref) {
+  return StartGameUseCase(ref.watch(gameServerRepositoryProvider));
+});
+final endGameUseCaseProvider = Provider<EndGameUseCase>((ref) {
+  return EndGameUseCase(ref.watch(gameServerRepositoryProvider));
+});
+final movePlayerUseCaseProvider = Provider<MovePlayerUseCase>((ref) {
+  return MovePlayerUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
+final selectGameModeUseCaseProvider = Provider<SelectGameModeUseCase>((ref) {
+  return SelectGameModeUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
+final lobbyStreamProvider = StreamProvider<LobbyEntity?>((ref) {
+  final repository = ref.watch(gameServerRepositoryProvider);
+  return repository.lobbyStream;
+});
