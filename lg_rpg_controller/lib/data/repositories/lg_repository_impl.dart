@@ -75,7 +75,7 @@ class LgRepositoryImpl implements LGRepository {
   Future<void> startServer() async {
     try {
       await _execute(
-          'cd ~/lg-rpg-server && chmod +x lg-launch.sh && nohup bash -l ./lg-launch.sh $screenNumber > launch.log 2>&1 &');
+          'cd ~/lg-rpg-server/scripts && chmod +x start-server.sh && nohup bash -l ./start-server.sh $screenNumber > launch.log 2>&1 &');
       log.i('LG server started successfully');
     } catch (e) {
       log.e(e.toString());
@@ -86,7 +86,28 @@ class LgRepositoryImpl implements LGRepository {
   Future<void> stopServer() async {
     try {
       await _execute(
-          'cd ~/lg-rpg-server && chmod +x lg-stop.sh && nohup bash -l ./lg-stop.sh $screenNumber > stop.log 2>&1 &');
+          'cd ~/lg-rpg-server/scripts && chmod +x stop-server.sh && nohup bash -l ./stop-server.sh $screenNumber > stop.log 2>&1 &');
+    } catch (e) {
+      log.e(e.toString());
+    }
+  }
+
+  @override
+  Future<void> launchBrowser() async {
+    try {
+      await _execute(
+          'cd ~/lg-rpg-server/scripts && chmod +x launch-browser.sh && nohup bash -l ./launch-browser.sh $screenNumber > launch.log 2>&1 &');
+      log.i('LG server started successfully');
+    } catch (e) {
+      log.e(e.toString());
+    }
+  }
+
+  @override
+  Future<void> closeBrowser() async {
+    try {
+      await _execute(
+          'cd ~/lg-rpg-server/scripts && chmod +x close-browser.sh && nohup bash -l ./close-browser.sh $screenNumber > stop.log 2>&1 &');
     } catch (e) {
       log.e(e.toString());
     }

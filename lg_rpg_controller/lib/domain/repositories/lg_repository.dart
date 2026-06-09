@@ -59,5 +59,10 @@ abstract class LGRepository {
   Future<void> forceRefresh(int screenNumber);
 
   Future<void> stopServer();
+
   Future<void> startServer();
+
+  Future<void> closeBrowser();
+
+  Future<void> launchBrowser();
 }
