@@ -14,6 +14,21 @@ class ConnectToGameServerUseCase {
   Future<void> call(String serverUrl) => repository.connectToServer(serverUrl);
 }
 
+class ConnectAndJoinLobbyUseCase {
+  final GameServerRepository repository;
+
+  ConnectAndJoinLobbyUseCase(this.repository);
+
+  Future<void> call({
+    required String serverUrl,
+    String name = 'Player',
+  }) async {
+    await repository.initToken();
+    await repository.connectToServer(serverUrl);
+    await repository.joinLobby(name: name);
+  }
+}
+
 class DisconnectFromGameServerUseCase {
   final GameServerRepository repository;
 
@@ -25,30 +40,36 @@ class JoinLobbyUseCase {
   final GameServerRepository repository;
 
   JoinLobbyUseCase(this.repository);
-  Future<void> call(String lobbyCode) => repository.joinLobby(lobbyCode);
+  Future<void> call({String name = 'Player'}) =>
+      repository.joinLobby(name: name);
 }
 
 class LeaveLobbyUseCase {
   final GameServerRepository repository;
   LeaveLobbyUseCase(this.repository);
-  Future<void> call(String lobbyId) => repository.leaveLobby(lobbyId);
-}
-
-class ReallocateTeamUseCase {
-  final GameServerRepository repository;
-  ReallocateTeamUseCase(this.repository);
-  Future<void> call(String playerId, String teamName) =>
-      repository.reallocateTeam(playerId, teamName);
+  Future<void> call() => repository.leaveLobby();
 }
 
 class StartGameUseCase {
   final GameServerRepository repository;
   StartGameUseCase(this.repository);
-  Future<void> call(String lobbyId) => repository.startGame(lobbyId);
+  Future<void> call() => repository.startGame();
 }
 
 class EndGameUseCase {
   final GameServerRepository repository;
   EndGameUseCase(this.repository);
-  Future<void> call(String lobbyId) => repository.endGame(lobbyId);
+  Future<void> call() => repository.endGame();
+}
+
+class MovePlayerUseCase {
+  final GameServerRepository repository;
+  MovePlayerUseCase(this.repository);
+  Future<void> call(double dx, double dy) => repository.movePlayer(dx, dy);
+}
+
+class SelectGameModeUseCase {
+  final GameServerRepository repository;
+  SelectGameModeUseCase(this.repository);
+  Future<void> call(String mode) => repository.selectGameMode(mode);
 }
