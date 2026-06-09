@@ -21,6 +21,7 @@ class SocketService implements ISocketService {
     try {
       log.i('SocketService: Connecting to $url...');
       await disconnect(); // Reset any existing connection
+      final completer = Completer<void>();
 
       _socket = io.io(
         url,
@@ -33,6 +34,9 @@ class SocketService implements ISocketService {
       _socket!.onConnect((_) {
         log.i('SocketService: Connected successfully');
         _connectionController.add(true);
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
       });
 
       _socket!.onDisconnect((_) {
@@ -43,9 +47,13 @@ class SocketService implements ISocketService {
       _socket!.onConnectError((err) {
         log.e('SocketService: Connection error: $err');
         _connectionController.add(false);
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Socket connection error: $err'));
+        }
       });
 
       _socket!.connect();
+      await completer.future.timeout(const Duration(seconds: 10));
     } catch (e) {
       log.e('SocketService: Connect exception: $e');
       _connectionController.add(false);
