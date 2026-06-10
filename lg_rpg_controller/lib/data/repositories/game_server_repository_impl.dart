@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/constant/log_service.dart';
 import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
@@ -50,7 +50,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
 
   void _registerSocketListeners() {
     // Listen to lobby updates
-    _socketService.on('updateLobby', (data) {
+    _socketService.on(SocketEvent.updateLobby, (data) {
       log.d('Received updateLobby: $data');
 
       if (data is! Map) {
@@ -74,7 +74,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
             : (playersList.isNotEmpty ? playersList.first.id : ''),
         selectedMode: data['selectedMode']?.toString() ??
             data['mode']?.toString() ??
-            'pvp',
+            GameMode.defaultMode,
         pvpTeams: const {},
       );
       _lobbyController.add(_currentLobby);
@@ -82,7 +82,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
         'Connected players: ${playersList.map((player) => player.name).join(', ')}',
       );
     });
-    _socketService.on('lobbyError', (data) {
+    _socketService.on(SocketEvent.lobbyError, (data) {
       log.e('Lobby error from server: ${data['message']}');
     });
   }
@@ -96,8 +96,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
   }
 
   void _unregisterSocketListeners() {
-    _socketService.off('updateLobby');
-    _socketService.off('lobbyError');
+    _socketService.off(SocketEvent.updateLobby);
+    _socketService.off(SocketEvent.lobbyError);
   }
 
   @override
@@ -166,7 +166,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
       }
 
       await _localStorage.savePlayerName(name);
-      _socketService.emit('joinLobby', {
+      _socketService.emit(SocketEvent.joinLobby, {
         'playerId': _playerToken,
         'name': name,
       });
@@ -179,7 +179,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> leaveLobby() async {
     try {
       log.i('Leaving lobby...');
-      _socketService.emit('leaveLobby', {
+      _socketService.emit(SocketEvent.leaveLobby, {
         'playerId': _playerToken,
       });
       // Locally reset lobby state
@@ -194,7 +194,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> startGame() async {
     try {
       log.i('Starting game...');
-      _socketService.emit('startGame', {});
+      _socketService.emit(SocketEvent.startGame, {});
     } catch (e) {
       log.e('Failed to start game: $e');
     }
@@ -204,7 +204,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> endGame() async {
     try {
       log.i('Ending game...');
-      _socketService.emit('endGame', {});
+      _socketService.emit(SocketEvent.endGame, {});
     } catch (e) {
       log.e('Failed to end game: $e');
     }
@@ -216,7 +216,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
       if (_playerToken.isEmpty) {
         await initToken();
       }
-      _socketService.emit('move', {
+      _socketService.emit(SocketEvent.move, {
         'playerId': _playerToken,
         'dx': dx,
         'dy': dy,
@@ -230,7 +230,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> selectGameMode(String mode) async {
     try {
       log.i('Selecting game mode: $mode...');
-      _socketService.emit('selectGameMode', {
+      _socketService.emit(SocketEvent.selectGameMode, {
         'playerId': _playerToken,
         'mode': mode,
       });
