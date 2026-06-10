@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:circular_menu/circular_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lg_rpg_controller/ui/pages/controller_page.dart';
 import 'package:lg_rpg_controller/ui/pages/home_page.dart';
 import 'package:lg_rpg_controller/ui/pages/inventory_page.dart';
 import 'package:lg_rpg_controller/ui/pages/lg_task.dart';
@@ -26,6 +27,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     WheelPage(),
     QuestPage(),
     SettingsPage(),
+    ControllerPage(),
     InventoryPage(),
   ];
 
@@ -35,6 +37,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     'Wheel',
     'Quest',
     'Settings',
+    'Controller',
     'Inventory',
   ];
 
@@ -67,7 +70,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.home,
             color: const Color.fromARGB(255, 239, 24, 24),
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(0);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.home);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
@@ -75,7 +78,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.assignment,
             color: Colors.teal,
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(1);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.lgTask);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
@@ -83,7 +86,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.circle,
             color: Colors.purple,
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(2);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.wheel);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
@@ -91,7 +94,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.map,
             color: Colors.orange,
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(3);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.quest);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
@@ -99,7 +102,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.settings,
             color: Colors.grey,
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(4);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.settings);
+              _menuKey.currentState?.reverseAnimation();
+            },
+          ),
+          CircularMenuItem(
+            icon: Icons.sports_esports,
+            color: Colors.indigo,
+            onTap: () {
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.controller);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
@@ -107,7 +118,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             icon: Icons.inventory,
             color: Colors.green,
             onTap: () {
-              ref.read(navigationProvider.notifier).setIndex(5);
+              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.inventory);
               _menuKey.currentState?.reverseAnimation();
             },
           ),
