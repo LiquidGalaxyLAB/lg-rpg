@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "manifests": {
+    "maps": "maps/maps.json",
+    "players": "players/players.json"
+  }
+}

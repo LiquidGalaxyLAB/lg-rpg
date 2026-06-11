@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "defaultMode": "pvp",
+  "modes": {
+    "pvp": {
+      "id": "pvp",
+      "label": "PvP Mode",
+      "maps": {
+        "3": {
+          "key": "map:pvp:3",
+          "path": "maps/pvp_map_3_screen.tmj",
+          "layers": {
+            "ground": "Tile Layer 1"
+          },
+          "tilesets": [
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:floor",
+              "path": "ninja-adventure-asset-pack/Backgrounds/Tilesets/TilesetFloor.png"
+            }
+          ]
+        },
+        "5": {
+          "key": "map:pvp:5",
+          "path": "maps/pvp_map_5_screen.tmj",
+          "layers": {
+            "ground": "Tile Layer 1"
+          },
+          "tilesets": [
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:floor",
+              "path": "ninja-adventure-asset-pack/Backgrounds/Tilesets/TilesetFloor.png"
+            }
+          ]
+        }
+      }
+    },
+    "zombie": {
+      "id": "zombie",
+      "label": "Zombie Mode",
+      "maps": {
+        "3": {
+          "key": "map:zombie:3",
+          "path": "maps/zombie_raid_map_3_screen.tmj",
+          "layers": {
+            "ground": "ground_layer"
+          },
+          "objectLayers": {
+            "players": "players"
+          },
+          "tilesets": [
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:floor",
+              "path": "ninja-adventure-asset-pack/Backgrounds/Tilesets/TilesetFloor.png"
+            }
+          ]
+        },
+        "5": {
+          "key": "map:zombie:5",
+          "path": "maps/zombie_raid_map_5_screen.tmj",
+          "layers": {
+            "ground": "ground_layer"
+          },
+          "objectLayers": {
+            "players": "players"
+          },
+          "tilesets": [
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:floor",
+              "path": "ninja-adventure-asset-pack/Backgrounds/Tilesets/TilesetFloor.png"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

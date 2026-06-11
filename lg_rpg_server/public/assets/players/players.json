@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "defaultPlayer": "water_priestess",
+  "players": {
+    "water_priestess": {
+      "id": "water_priestess",
+      "displayName": "Water Priestess",
+      "assetPath": "players/cherit/water_priestess_288x128.png",
+      "sourceTileset": "players/cherit/water_priestess_288x128.tsx",
+      "textureKey": "player:water_priestess",
+      "frame": {
+        "width": 288,
+        "height": 128,
+        "columns": 32,
+        "rows": 15,
+        "total": 480
+      },
+      "render": {
+        "scale": 4,
+        "origin": {
+          "x": 0,
+          "y": 1
+        }
+      },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle": {
+          "row": 0,
+          "frames": {
+            "start": 0,
+            "end": 7
+          },
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "row": 1,
+          "frames": {
+            "start": 32,
+            "end": 41
+          },
+          "frameRate": 10,
+          "repeat": -1
+        },
+        "surf": {
+          "row": 2,
+          "frames": {
+            "start": 64,
+            "end": 71
+          },
+          "frameRate": 10,
+          "repeat": -1
+        },
+        "jump_up": {
+          "row": 3,
+          "frames": {
+            "start": 96,
+            "end": 98
+          },
+          "frameRate": 6,
+          "repeat": 0
+        },
+        "jump_down": {
+          "row": 4,
+          "frames": {
+            "start": 128,
+            "end": 130
+          },
+          "frameRate": 6,
+          "repeat": 0
+        },
+        "air_attack": {
+          "row": 5,
+          "frames": {
+            "start": 160,
+            "end": 167
+          },
+          "frameRate": 10,
+          "repeat": 0
+        },
+        "tumble": {
+          "row": 6,
+          "frames": {
+            "start": 192,
+            "end": 197
+          },
+          "frameRate": 8,
+          "repeat": 0
+        },
+        "attack_1": {
+          "row": 7,
+          "frames": {
+            "start": 224,
+            "end": 230
+          },
+          "frameRate": 8,
+          "repeat": 0
+        },
+        "attack_2": {
+          "row": 8,
+          "frames": {
+            "start": 256,
+            "end": 276
+          },
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "attack_3": {
+          "row": 9,
+          "frames": {
+            "start": 288,
+            "end": 314
+          },
+          "frameRate": 16,
+          "repeat": 0
+        },
+        "special_attack": {
+          "row": 10,
+          "frames": {
+            "start": 320,
+            "end": 351
+          },
+          "frameRate": 18,
+          "repeat": 0
+        },
+        "heal": {
+          "row": 11,
+          "frames": {
+            "start": 352,
+            "end": 363
+          },
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "defend": {
+          "row": 12,
+          "frames": {
+            "start": 384,
+            "end": 395
+          },
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "take_hit": {
+          "row": 13,
+          "frames": {
+            "start": 416,
+            "end": 422
+          },
+          "frameRate": 8,
+          "repeat": 0
+        },
+        "death": {
+          "row": 14,
+          "frames": {
+            "start": 448,
+            "end": 463
+          },
+          "frameRate": 12,
+          "repeat": 0
+        }
+      }
+    }
+  }
+}
