@@ -3,6 +3,7 @@ import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/constant/log_service.dart';
 import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/player_entity.dart';
 import 'package:lg_rpg_controller/domain/repositories/game_server_repository.dart';
@@ -22,6 +23,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
   final _serverStatusController =
       StreamController<GameServerEntity>.broadcast();
   final _lobbyController = StreamController<LobbyEntity?>.broadcast();
+  final _gameStartedController =
+      StreamController<GameStartedEntity>.broadcast();
 
   GameServerRepositoryImpl(this._localStorage, this._socketService) {
     _setupConnectionListener();
@@ -85,6 +88,16 @@ class GameServerRepositoryImpl extends GameServerRepository {
     _socketService.on(SocketEvent.lobbyError, (data) {
       log.e('Lobby error from server: ${data['message']}');
     });
+    _socketService.on(SocketEvent.gameStarted, (data) {
+      log.i('Game started from server: $data');
+
+      final payload = data is Map ? data : const {};
+      _gameStartedController.add(GameStartedEntity(
+        selectedMode:
+            payload['selectedMode']?.toString() ?? GameMode.defaultMode,
+        startedBy: payload['startedBy']?.toString() ?? '',
+      ));
+    });
   }
 
   PlayerEntity _mapSocketPlayer(Map<dynamic, dynamic> player) {
@@ -98,6 +111,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   void _unregisterSocketListeners() {
     _socketService.off(SocketEvent.updateLobby);
     _socketService.off(SocketEvent.lobbyError);
+    _socketService.off(SocketEvent.gameStarted);
   }
 
   @override
@@ -106,6 +120,10 @@ class GameServerRepositoryImpl extends GameServerRepository {
 
   @override
   Stream<LobbyEntity?> get lobbyStream => _lobbyController.stream;
+
+  @override
+  Stream<GameStartedEntity> get gameStartedStream =>
+      _gameStartedController.stream;
 
   @override
   bool get isGameConnected => _isConnected;
