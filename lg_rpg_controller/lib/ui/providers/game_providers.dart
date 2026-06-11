@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/di/injection_container.dart';
+import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/usecases/game_server_control.dart';
 export '../../core/di/injection_container.dart'
@@ -48,4 +49,9 @@ final selectGameModeUseCaseProvider = Provider<SelectGameModeUseCase>((ref) {
 final lobbyStreamProvider = StreamProvider<LobbyEntity?>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);
   return repository.lobbyStream;
+});
+
+final gameStartedStreamProvider = StreamProvider<GameStartedEntity>((ref) {
+  final repository = ref.watch(gameServerRepositoryProvider);
+  return repository.gameStartedStream;
 });
