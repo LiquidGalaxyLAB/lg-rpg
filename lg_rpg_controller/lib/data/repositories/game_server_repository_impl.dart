@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/constant/log_service.dart';
+import 'package:lg_rpg_controller/core/errors/exceptions.dart';
 import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
@@ -159,10 +161,47 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> connectToServer(String serverUrl) async {
     try {
       _serverUrl = serverUrl;
+
+      await _preflightHealthCheck(_serverUrl);
       await _socketService.connect(_serverUrl);
     } catch (e) {
       log.e('Failed in connectToServer: $e');
       rethrow;
+    }
+  }
+
+  /// Pings the server's `/api/health` endpoint to confirm reachability.
+  Future<void> _preflightHealthCheck(String serverUrl) async {
+    const timeout = Duration(seconds: 5);
+    final uri = Uri.parse('$serverUrl/api/health');
+    final client = HttpClient()..connectionTimeout = timeout;
+
+    try {
+      final request = await client.getUrl(uri).timeout(timeout);
+      final response = await request.close().timeout(timeout);
+      await response.drain<void>();
+
+      if (response.statusCode != 200) {
+        throw GameServerException(
+          'Server responded with HTTP ${response.statusCode} at $uri. '
+          'Make sure the LG RPG server is running.',
+        );
+      }
+      log.i('Health check OK: $uri');
+    } on TimeoutException {
+      throw GameServerException(
+        'Server at $serverUrl did not respond. The server may be down, or '
+        'port ${GameServerConfig.port} is blocked on the Liquid Galaxy '
+        '(check the firewall and network routing).',
+      );
+    } on SocketException catch (e) {
+      throw GameServerException(
+        'Cannot reach $serverUrl (${e.message}). Check that the LG IP is '
+        'correct, the server is started, and port ${GameServerConfig.port} '
+        'is open on the Liquid Galaxy.',
+      );
+    } finally {
+      client.close(force: true);
     }
   }
 

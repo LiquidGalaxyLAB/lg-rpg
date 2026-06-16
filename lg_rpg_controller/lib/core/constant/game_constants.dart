@@ -12,10 +12,13 @@ abstract final class GameModeLabel {
 }
 
 abstract final class GameServerConfig {
-  static const url = String.fromEnvironment(
-    'GAME_SERVER_URL',
-    defaultValue: 'http://10.129.32.94:3000',
-  );
+  static const port = 3000;
+
+  static String urlForHost(String host) {
+    final trimmed = host.trim();
+    if (trimmed.isEmpty) return '';
+    return 'http://$trimmed:$port';
+  }
 }
 
 abstract final class SocketEvent {

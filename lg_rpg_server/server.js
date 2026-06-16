@@ -25,6 +25,7 @@ const mapsManifestPath = path.join(__dirname, 'public', ASSET_MANIFESTS.maps);
 const mapsManifest = JSON.parse(fs.readFileSync(mapsManifestPath, 'utf8'));
 assertGameModesMatchManifest(mapsManifest);
 
+// Verify that every game mode has a map defined for the current number of screens (totalScreens).
 for (const mode of Object.values(GAME_MODES)) {
   if (!mapsManifest.modes[mode]?.maps?.[String(SERVER_CONFIG.totalScreens)]) {
     throw new Error(
@@ -37,10 +38,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: SERVER_CONFIG.corsOrigin } });
 
-const players = new Map();
-const socketPlayers = new Map();
+const players = new Map(); // playerId -> player state
+const socketPlayers = new Map(); // socketId -> playerId, so we can find a player on disconnect
 let selectedMode = DEFAULT_GAME_MODE;
 
+// Serve public files and force the browser to always download the newest version.
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,
@@ -115,6 +117,7 @@ function removePlayer(playerId, socketId) {
   players.delete(playerId);
   if (socketId) socketPlayers.delete(socketId);
 
+  // If the host left, promote the next player so the lobby always has a host.
   if (removed?.isHost && players.size > 0) {
     const nextHost = players.values().next().value;
     players.set(nextHost.playerId, { ...nextHost, isHost: true });
@@ -128,6 +131,7 @@ setInterval(() => {
     const nextX = (player.x || PLAYER_DEFAULTS.startX) + (player.velocityX || 0);
     const nextY = (player.y || PLAYER_DEFAULTS.startY) + (player.velocityY || 0);
 
+    // Keep players inside the map.
     player.x = clamp(nextX, PLAYER_SIZE.halfWidth, worldBounds.width - PLAYER_SIZE.halfWidth);
     player.y = clamp(nextY, PLAYER_SIZE.height, worldBounds.height);
   }
@@ -151,6 +155,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Reuse existing state on rejoin; otherwise reject if the lobby is full.
     const existing = players.get(playerId);
     if (!existing && players.size >= SERVER_CONFIG.maxPlayers) {
       socket.emit(SOCKET_EVENTS.LOBBY_ERROR, { message: 'Lobby is full.' });
@@ -177,6 +182,7 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
+  // Store the player's intended velocity; the game loop applies it each tick.
   socket.on(SOCKET_EVENTS.MOVE, (data) => {
     const player = players.get(data.playerId);
     if (!player) return;
