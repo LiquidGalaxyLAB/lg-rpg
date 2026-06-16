@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/constant/log_service.dart';
 
 import '../datasources/local_storage_source.dart';
@@ -74,12 +75,23 @@ class LgRepositoryImpl implements LGRepository {
   @override
   Future<void> startServer() async {
     try {
+      // Open the firewall first so the controller can actually reach the server.
+      await _openFirewallPort(GameServerConfig.port);
       await _execute(
           'cd ~/lg-rpg-server/scripts && chmod +x start-server.sh && nohup bash -l ./start-server.sh $screenNumber > launch.log 2>&1 &');
       log.i('LG server started successfully');
     } catch (e) {
       log.e(e.toString());
     }
+  }
+
+  Future<void> _openFirewallPort(int port) async {
+    final accept = '-p tcp --dport $port -j ACCEPT';
+    await _execute(
+      'echo "$_password" | sudo -S sh -c '
+      '"iptables -C INPUT $accept 2>/dev/null || iptables -I INPUT 1 $accept"',
+    );
+    log.i('Firewall: ensured port $port is open on the LG');
   }
 
   @override

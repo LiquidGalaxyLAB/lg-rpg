@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/di/injection_container.dart';
+import 'package:lg_rpg_controller/ui/providers/connection_provider.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/lg_providers.dart';
 import 'package:lg_rpg_controller/ui/widgets/lobby_players_section.dart';
@@ -32,11 +33,23 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _connectToServer() async {
+    final lgIp = ref.read(connectionProvider).ip;
+    final serverUrl = GameServerConfig.urlForHost(lgIp);
+    if (serverUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Enter the Liquid Galaxy IP in Settings and connect before joining a game.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isConnecting = true);
     try {
       final name = _nameController.text.trim();
       await ref.read(connectAndJoinLobbyUseCaseProvider).call(
-            serverUrl: GameServerConfig.url,
+            serverUrl: serverUrl,
             name: name.isEmpty ? 'Player' : name,
           );
     } catch (error) {
