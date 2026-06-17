@@ -22,6 +22,9 @@ class GameServerRepositoryImpl extends GameServerRepository {
   bool _isConnected = false;
   String _serverUrl = '';
 
+  bool _wantsLobby = false;
+  String _lobbyName = 'Player';
+
   final _serverStatusController =
       StreamController<GameServerEntity>.broadcast();
   final _lobbyController = StreamController<LobbyEntity?>.broadcast();
@@ -42,8 +45,15 @@ class GameServerRepositoryImpl extends GameServerRepository {
         playerToken: _playerToken,
       ));
       if (isConnected) {
-        // Register socket event listeners once connection is active
         _registerSocketListeners();
+
+        if (_wantsLobby) {
+          log.i('Reconnected — re-joining lobby as "$_lobbyName"');
+          _socketService.emit(SocketEvent.joinLobby, {
+            'playerId': _playerToken,
+            'name': _lobbyName,
+          });
+        }
       } else {
         // Clear listeners and state on disconnect
         _unregisterSocketListeners();
@@ -223,6 +233,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
       }
 
       await _localStorage.savePlayerName(name);
+      _wantsLobby = true;
+      _lobbyName = name;
       _socketService.emit(SocketEvent.joinLobby, {
         'playerId': _playerToken,
         'name': name,
@@ -236,6 +248,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> leaveLobby() async {
     try {
       log.i('Leaving lobby...');
+      _wantsLobby = false;
       _socketService.emit(SocketEvent.leaveLobby, {
         'playerId': _playerToken,
       });
