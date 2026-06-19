@@ -37,6 +37,15 @@ Released to the public domain by the creator. No credit is legally required, tho
 
 ---
 
+### LuizMelo
+
+| Asset | Link |
+|---|---|
+| Monsters Creatures Fantasy | <https://luizmelo.itch.io/monsters-creatures-fantasy> |
+| Monsters Creatures Fantasy 2 | <https://luizmelo.itch.io/monsters-creatures-fantasy-2> |
+
+---
+
 ## How to verify licenses
 
 Each link above leads to the original itch.io page where the license is listed under **"More Information → Asset license"**. The full legal text of each Creative Commons license is available at <https://creativecommons.org>.

@@ -18,9 +18,10 @@
       "render": {
         "scale": 4,
         "origin": {
-          "x": 0,
+          "x": 0.5,
           "y": 1
-        }
+        },
+        "bodyHeight": 44
       },
       "defaultAnimation": "idle",
       "animations": {

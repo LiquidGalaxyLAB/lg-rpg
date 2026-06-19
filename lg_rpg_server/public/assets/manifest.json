@@ -2,6 +2,7 @@
   "version": 1,
   "manifests": {
     "maps": "maps/maps.json",
-    "players": "players/players.json"
+    "players": "players/players.json",
+    "enemies": "enemies/enemies.json"
   }
 }
