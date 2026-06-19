@@ -47,7 +47,8 @@
             "ground": "ground_layer"
           },
           "objectLayers": {
-            "players": "players"
+            "playerSpawn": "player_spawn",
+            "enemySpawn": "enemy_spawn"
           },
           "tilesets": [
             {
@@ -64,7 +65,8 @@
             "ground": "ground_layer"
           },
           "objectLayers": {
-            "players": "players"
+            "playerSpawn": "player_spawn",
+            "enemySpawn": "enemy_spawn"
           },
           "tilesets": [
             {
