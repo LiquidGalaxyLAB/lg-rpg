@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "enemies": {
+    "flying_eye": {
+      "id": "flying_eye",
+      "displayName": "Flying Eye",
+      "textureKeyPrefix": "enemy:flying_eye",
+      "frame": { "width": 150, "height": 150 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.5 } },
+      "defaultAnimation": "flight",
+      "animations": {
+        "flight":   { "path": "enemies/flying_eye/flight.png",   "frames": 8, "frameRate": 10, "repeat": -1 },
+        "attack_1": { "path": "enemies/flying_eye/attack_1.png", "frames": 8, "frameRate": 12, "repeat": 0  },
+        "attack_2": { "path": "enemies/flying_eye/attack_2.png", "frames": 8, "frameRate": 12, "repeat": 0  },
+        "attack_3": { "path": "enemies/flying_eye/attack_3.png", "frames": 6, "frameRate": 12, "repeat": 0  },
+        "take_hit": { "path": "enemies/flying_eye/take_hit.png", "frames": 4, "frameRate": 8,  "repeat": 0  },
+        "death":    { "path": "enemies/flying_eye/death.png",    "frames": 4, "frameRate": 8,  "repeat": 0  }
+      },
+      "projectiles": {
+        "orb": {
+          "path": "enemies/flying_eye/projectile.png",
+          "frame": { "width": 48, "height": 48 },
+          "frames": 8
+        }
+      }
+    },
+    "goblin": {
+      "id": "goblin",
+      "displayName": "Goblin",
+      "textureKeyPrefix": "enemy:goblin",
+      "frame": { "width": 150, "height": 150 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.673 } },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle":     { "path": "enemies/goblin/idle.png",     "frames": 4,  "frameRate": 6,  "repeat": -1 },
+        "run":      { "path": "enemies/goblin/run.png",      "frames": 8,  "frameRate": 10, "repeat": -1 },
+        "attack_1": { "path": "enemies/goblin/attack_1.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
+        "attack_2": { "path": "enemies/goblin/attack_2.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
+        "attack_3": { "path": "enemies/goblin/attack_3.png", "frames": 12, "frameRate": 14, "repeat": 0  },
+        "take_hit": { "path": "enemies/goblin/take_hit.png", "frames": 4,  "frameRate": 8,  "repeat": 0  },
+        "death":    { "path": "enemies/goblin/death.png",    "frames": 4,  "frameRate": 8,  "repeat": 0  }
+      },
+      "projectiles": {
+        "bomb": {
+          "path": "enemies/goblin/bomb.png",
+          "frame": { "width": 100, "height": 100 },
+          "frames": 19
+        }
+      }
+    },
+    "mushroom": {
+      "id": "mushroom",
+      "displayName": "Mushroom",
+      "textureKeyPrefix": "enemy:mushroom",
+      "frame": { "width": 150, "height": 150 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.673 } },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle":     { "path": "enemies/mushroom/idle.png",     "frames": 4,  "frameRate": 6,  "repeat": -1 },
+        "run":      { "path": "enemies/mushroom/run.png",      "frames": 8,  "frameRate": 10, "repeat": -1 },
+        "attack_1": { "path": "enemies/mushroom/attack_1.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
+        "attack_2": { "path": "enemies/mushroom/attack_2.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
+        "attack_3": { "path": "enemies/mushroom/attack_3.png", "frames": 11, "frameRate": 12, "repeat": 0  },
+        "take_hit": { "path": "enemies/mushroom/take_hit.png", "frames": 4,  "frameRate": 8,  "repeat": 0  },
+        "death":    { "path": "enemies/mushroom/death.png",    "frames": 4,  "frameRate": 8,  "repeat": 0  }
+      },
+      "projectiles": {
+        "spore": {
+          "path": "enemies/mushroom/projectile.png",
+          "frame": { "width": 50, "height": 50 },
+          "frames": 8
+        }
+      }
+    },
+    "skeleton": {
+      "id": "skeleton",
+      "displayName": "Skeleton",
+      "textureKeyPrefix": "enemy:skeleton",
+      "frame": { "width": 150, "height": 150 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.673 } },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle":     { "path": "enemies/skeleton/idle.png",     "frames": 4, "frameRate": 6,  "repeat": -1 },
+        "walk":     { "path": "enemies/skeleton/walk.png",     "frames": 4, "frameRate": 8,  "repeat": -1 },
+        "attack_1": { "path": "enemies/skeleton/attack_1.png", "frames": 8, "frameRate": 12, "repeat": 0  },
+        "attack_2": { "path": "enemies/skeleton/attack_2.png", "frames": 8, "frameRate": 12, "repeat": 0  },
+        "attack_3": { "path": "enemies/skeleton/attack_3.png", "frames": 6, "frameRate": 12, "repeat": 0  },
+        "shield":   { "path": "enemies/skeleton/shield.png",   "frames": 4, "frameRate": 8,  "repeat": 0  },
+        "take_hit": { "path": "enemies/skeleton/take_hit.png", "frames": 4, "frameRate": 8,  "repeat": 0  },
+        "death":    { "path": "enemies/skeleton/death.png",    "frames": 4, "frameRate": 8,  "repeat": 0  }
+      },
+      "projectiles": {
+        "sword": {
+          "path": "enemies/skeleton/sword.png",
+          "frame": { "width": 92, "height": 102 },
+          "frames": 8
+        }
+      }
+    },
+    "bat": {
+      "id": "bat",
+      "displayName": "Bat",
+      "textureKeyPrefix": "enemy:bat",
+      "frame": { "width": 87, "height": 87 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.66 } },
+      "defaultAnimation": "fly",
+      "animations": {
+        "fly":        { "path": "enemies/bat/fly.png",        "frames": 11, "frameRate": 12, "repeat": -1 },
+        "attack":     { "path": "enemies/bat/attack.png",     "frames": 11, "frameRate": 14, "repeat": 0  },
+        "fly_to_fall":{ "path": "enemies/bat/fly_to_fall.png","frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "fall":       { "path": "enemies/bat/fall.png",       "frames": 5,  "frameRate": 8,  "repeat": 0  },
+        "hurt":       { "path": "enemies/bat/hurt.png",       "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "death":      { "path": "enemies/bat/death.png",      "frames": 4,  "frameRate": 8,  "repeat": 0  }
+      }
+    },
+    "mimic": {
+      "id": "mimic",
+      "displayName": "Mimic",
+      "textureKeyPrefix": "enemy:mimic",
+      "frame": { "width": 146, "height": 146 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.568 } },
+      "defaultAnimation": "idle_closed",
+      "animations": {
+        "idle_closed":      { "path": "enemies/mimic/idle_closed.png",      "frames": 1,  "frameRate": 1,  "repeat": -1 },
+        "idle_open":        { "path": "enemies/mimic/idle_open.png",        "frames": 1,  "frameRate": 1,  "repeat": -1 },
+        "idle_transformed": { "path": "enemies/mimic/idle_transformed.png", "frames": 9,  "frameRate": 8,  "repeat": -1 },
+        "opening":          { "path": "enemies/mimic/opening.png",          "frames": 6,  "frameRate": 8,  "repeat": 0  },
+        "transform":        { "path": "enemies/mimic/transform.png",        "frames": 7,  "frameRate": 10, "repeat": 0  },
+        "walk":             { "path": "enemies/mimic/walk.png",             "frames": 6,  "frameRate": 8,  "repeat": -1 },
+        "attack_1":         { "path": "enemies/mimic/attack_1.png",         "frames": 14, "frameRate": 14, "repeat": 0  },
+        "attack_2":         { "path": "enemies/mimic/attack_2.png",         "frames": 13, "frameRate": 14, "repeat": 0  },
+        "hurt":             { "path": "enemies/mimic/hurt.png",             "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "death":            { "path": "enemies/mimic/death.png",            "frames": 6,  "frameRate": 8,  "repeat": 0  }
+      }
+    },
+    "rat": {
+      "id": "rat",
+      "displayName": "Rat",
+      "textureKeyPrefix": "enemy:rat",
+      "frame": { "width": 70, "height": 70 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.643 } },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle":   { "path": "enemies/rat/idle.png",   "frames": 10, "frameRate": 8,  "repeat": -1 },
+        "run":    { "path": "enemies/rat/run.png",    "frames": 8,  "frameRate": 10, "repeat": -1 },
+        "attack": { "path": "enemies/rat/attack.png", "frames": 12, "frameRate": 12, "repeat": 0  },
+        "hurt":   { "path": "enemies/rat/hurt.png",   "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "death":  { "path": "enemies/rat/death.png",  "frames": 6,  "frameRate": 8,  "repeat": 0  }
+      }
+    },
+    "slime": {
+      "id": "slime",
+      "displayName": "Slime",
+      "textureKeyPrefix": "enemy:slime",
+      "frame": { "width": 156, "height": 156 },
+      "render": { "scale": 2, "origin": { "x": 0.5, "y": 0.558 } },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle":   { "path": "enemies/slime/idle.png",   "frames": 14, "frameRate": 8,  "repeat": -1 },
+        "walk":   { "path": "enemies/slime/walk.png",   "frames": 6,  "frameRate": 8,  "repeat": -1 },
+        "attack": { "path": "enemies/slime/attack.png", "frames": 19, "frameRate": 14, "repeat": 0  },
+        "hurt":   { "path": "enemies/slime/hurt.png",   "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "death":  { "path": "enemies/slime/death.png",  "frames": 11, "frameRate": 8,  "repeat": 0  }
+      }
+    }
+  }
+}
