@@ -2,13 +2,52 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leader Board</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zombie Raid Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="right_screen.css">
 </head>
 
 <body>
-    <h1> Leader Board</h1>
+  <main class="screen">
+    <!-- Merged Header & Match Status Panel -->
+    <header class="topbar panel" id="result">
+      <div class="brand">
+        <span class="mode-badge" id="modeLabel">Zombie Raid</span>
+        <h1 class="title">ARENA BOARD</h1>
+      </div>
+
+      <div class="timer-display">
+        <p class="timer-label" id="clockLabel">Waiting</p>
+        <p class="timer-value" id="clockValue">0:00</p>
+        <p class="timer-sub" id="resultSub"></p>
+      </div>
+
+    </header>
+
+    <!-- Squad Leaderboard Panel -->
+    <section class="board panel" aria-labelledby="leaderboardTitle">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SQUAD</p>
+          <h2 class="section-title" id="leaderboardTitle">Leaderboard</h2>
+        </div>
+        <span class="hint">Top 4</span>
+      </div>
+      <div class="rows" id="rows">
+        <!-- Dynamically populated from JS -->
+      </div>
+    </section>
+
+    <!-- Banner Overlay -->
+    <div class="banner" id="banner"></div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="right_screen.js"></script>
 </body>
 
 </html>
