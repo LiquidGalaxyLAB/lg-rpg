@@ -32,7 +32,15 @@ for idx in "${!PHYSICAL_SCREENS[@]}"; do
     ((GAME_SCREEN++))
   fi
 
-  BROWSER_CMD="DISPLAY=:0 chromium-browser --kiosk '${URL}' &>/dev/null &"
+  BROWSER_CMD="DISPLAY=:0 chromium-browser \
+    --autoplay-policy=no-user-gesture-required \
+    --ignore-gpu-blocklist \
+    --enable-gpu-rasterization \
+    --enable-zero-copy \
+    --enable-accelerated-2d-canvas \
+    --disable-software-rasterizer \
+    --use-gl=desktop \
+    --kiosk '${URL}' &>/dev/null &"
 
   if [ "$host_id" -eq 1 ]; then
     echo "   ✅ Launching $LABEL locally on lg1 (Position $pos): $URL"

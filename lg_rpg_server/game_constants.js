@@ -96,14 +96,13 @@ export const ENEMY_COMBAT = Object.freeze({
   health: 30, hitboxHalfWidth: 28, hitboxHeight: 56, hitboxOriginY: 1, attackRange: 56, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700,
 });
 
-// Stats and behaviors for different zombie enemy types.
+// Stats for different zombie enemy types.
 export const ZOMBIE_ENEMY_TYPES = Object.freeze([
-  { type: 'skeleton', behavior: 'chaser' },
-  { type: 'goblin', behavior: 'chaser' },
-  { type: 'mushroom', behavior: 'chaser' },
+  { type: 'skeleton' },
+  { type: 'goblin' },
+  { type: 'mushroom' },
   {
     type: 'rat',
-    behavior: 'chaser',
     speed: 2.8,
     health: 15,
     hitboxHalfWidth: 18,
@@ -111,7 +110,6 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'slime',
-    behavior: 'chaser',
     speed: 1.6,
     health: 50,
     hitboxHalfWidth: 34,
@@ -119,7 +117,6 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'bat',
-    behavior: 'chaser',
     speed: 2.8,
     health: 15,
     attackDamage: 5,
@@ -129,7 +126,6 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'flying_eye',
-    behavior: 'chaser',
     speed: 2.6,
     health: 20,
     hitboxHalfWidth: 42,
@@ -138,7 +134,6 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'mimic',
-    behavior: 'ambush',
     aggroRange: 135,
     speed: 3.0,
     commitForLife: true,

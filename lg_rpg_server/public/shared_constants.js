@@ -9,7 +9,19 @@ export const SOCKET_EVENTS = Object.freeze({
   GAME_STARTED: 'gameStarted',
   END_GAME: 'endGame',
   MOVE: 'move',
+  PLAYER_ATTACK: 'playerAttack',
   GAME_STATE: 'gameState',
+  GAME_OVER: 'gameOver',
+  YOU_DIED: 'youDied',
+  MATCH_ANNOUNCEMENT: 'matchAnnouncement',
+  CHEERLEADER_AUDIO: 'cheerleaderAudio',
+  CHEERLEADER_SPOKEN: 'cheerleaderSpoken',
+  REGISTER_CHEERLEADER_SCREEN: 'registerCheerleaderScreen',
+});
+
+export const GAME_PHASES = Object.freeze({
+  LOBBY: 'lobby',
+  PLAYING: 'playing',
 });
 
 // Per-screen view, in world pixels. fadeZone is the cross-screen fade width.
