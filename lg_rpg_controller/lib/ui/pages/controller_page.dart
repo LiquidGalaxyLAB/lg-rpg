@@ -36,6 +36,7 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
       body: SafeArea(
         child: Row(
           children: [
+            // Left: movement joystick.
             Expanded(
               child: Center(
                 child: Joystick(
@@ -44,6 +45,30 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
                         .read(movePlayerUseCaseProvider)
                         .call(details.x, details.y);
                   },
+                ),
+              ),
+            ),
+            // Right: attack button (server cooldown-gates rapid taps).
+            Expanded(
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => ref.read(attackPlayerUseCaseProvider).call(),
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFD32F2F),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black45,
+                            blurRadius: 8,
+                            offset: Offset(0, 4)),
+                      ],
+                    ),
+                    child: const Icon(Icons.gps_fixed,
+                        color: Colors.white, size: 48),
+                  ),
                 ),
               ),
             ),

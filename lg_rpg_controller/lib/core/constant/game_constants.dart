@@ -31,5 +31,9 @@ abstract final class SocketEvent {
   static const gameStarted = 'gameStarted';
   static const endGame = 'endGame';
   static const move = 'move';
+  static const playerAttack = 'playerAttack';
   static const gameState = 'gameState';
+  static const gameOver = 'gameOver';
+  static const youDied = 'youDied';
+  static const matchAnnouncement = 'matchAnnouncement';
 }
