@@ -28,6 +28,7 @@ class SocketService implements ISocketService {
         io.OptionBuilder()
             .setTransports(['websocket'])
             .disableAutoConnect()
+            .enableForceNew()
             .build(),
       );
 
@@ -39,8 +40,8 @@ class SocketService implements ISocketService {
         }
       });
 
-      _socket!.onDisconnect((_) {
-        log.w('SocketService: Disconnected');
+      _socket!.onDisconnect((reason) {
+        log.w('SocketService: Disconnected (reason: $reason)');
         _connectionController.add(false);
       });
 

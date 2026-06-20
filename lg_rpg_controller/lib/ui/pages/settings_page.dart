@@ -176,11 +176,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onPressed: !connectionState.isConnected
                     ? null
                     : () async {
-                        await lgRepositoryState.startServer();
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Server Started!')),
+                        final messenger = ScaffoldMessenger.of(context);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                              content: Text('Starting server…'),
+                              duration: Duration(seconds: 12)),
                         );
+                        try {
+                          await lgRepositoryState.startServer();
+                          messenger.hideCurrentSnackBar();
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Server Started!')),
+                          );
+                        } catch (e) {
+                          messenger.hideCurrentSnackBar();
+                          messenger.showSnackBar(
+                            SnackBar(
+                                content: Text('Failed to start server: $e')),
+                          );
+                        }
                       },
                 child: const Text('Start the Server'),
               ),
@@ -194,13 +208,68 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onPressed: !connectionState.isConnected
                     ? null
                     : () async {
-                        await lgRepositoryState.stopServer();
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Server Stopped!')),
-                        );
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await lgRepositoryState.stopServer();
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Server Stopped!')),
+                          );
+                        } catch (e) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                                content: Text('Failed to stop server: $e')),
+                          );
+                        }
                       },
                 child: const Text('Stop the Server'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: !connectionState.isConnected
+                    ? null
+                    : () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await lgRepositoryState.launchBrowser();
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Browser launched!')),
+                          );
+                        } catch (e) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                                content: Text('Failed to launch browser: $e')),
+                          );
+                        }
+                      },
+                child: const Text('Launch Browser'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.red.shade100, // Visual cue for close
+                  foregroundColor: Colors.red.shade900,
+                ),
+                onPressed: !connectionState.isConnected
+                    ? null
+                    : () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await lgRepositoryState.closeBrowser();
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Browser closed!')),
+                          );
+                        } catch (e) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                                content: Text('Failed to close browser: $e')),
+                          );
+                        }
+                      },
+                child: const Text('Close Browser'),
               ),
             ],
           ),
