@@ -68,6 +68,12 @@ class MovePlayerUseCase {
   Future<void> call(double dx, double dy) => repository.movePlayer(dx, dy);
 }
 
+class AttackPlayerUseCase {
+  final GameServerRepository repository;
+  AttackPlayerUseCase(this.repository);
+  Future<void> call() => repository.attackPlayer();
+}
+
 class SelectGameModeUseCase {
   final GameServerRepository repository;
   SelectGameModeUseCase(this.repository);
