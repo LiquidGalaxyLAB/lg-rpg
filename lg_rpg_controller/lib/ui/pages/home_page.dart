@@ -4,7 +4,6 @@ import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/di/injection_container.dart';
 import 'package:lg_rpg_controller/ui/providers/connection_provider.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
-import 'package:lg_rpg_controller/ui/providers/lg_providers.dart';
 import 'package:lg_rpg_controller/ui/widgets/lobby_players_section.dart';
 
 class HomePage extends ConsumerStatefulWidget {
@@ -18,6 +17,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   final _nameController = TextEditingController(text: 'Player');
   bool _isConnecting = false;
   bool _isStartingGame = false;
+  // PvP is temporarily disabled. Guards the auto-select so we emit the
+  // switch-to-zombie request once per pvp lobby, not every rebuild.
+  bool _zombieForceRequested = false;
 
   @override
   void initState() {
@@ -65,8 +67,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _startGame() async {
     setState(() => _isStartingGame = true);
     try {
+      // Only start the match. The LG displays are launched separately from
+      // Settings so the screens are already up (Phaser loaded) before the
+      // action begins, and we don't stack a new Chromium kiosk every round.
       await ref.read(startGameUseCaseProvider).call();
-      await ref.read(launchBrowserUseCaseProvider).call();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +96,22 @@ class _HomePageState extends ConsumerState<HomePage> {
         ? lobby!.selectedMode
         : GameMode.defaultMode;
     final isHost = lobby?.isHost(gameServerRepository.playerToken) ?? false;
+
+    // PvP is temporarily disabled
+
+    if (isHost && lobby != null && lobby.selectedMode == GameMode.pvp) {
+      if (!_zombieForceRequested) {
+        _zombieForceRequested = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ref.read(selectGameModeUseCaseProvider).call(GameMode.zombie);
+        });
+      }
+    } else {
+      _zombieForceRequested = false;
+    }
+    // Never show pvp as the active selection while it's disabled.
+    final displayMode =
+        selectedGameMode == GameMode.pvp ? GameMode.zombie : selectedGameMode;
 
     return Scaffold(
       appBar: AppBar(title: const Text('LG RPG'), centerTitle: true),
@@ -123,10 +143,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                           color: Colors.white, fontWeight: FontWeight.w700)),
                   SegmentedButton<String>(
                     segments: const [
+                      // PvP is temporarily disabled until its mode logic lands.
                       ButtonSegment(
                         value: GameMode.pvp,
-                        label: Text(GameModeLabel.pvp),
+                        label: Text('${GameModeLabel.pvp} (soon)'),
                         icon: Icon(Icons.sports_martial_arts),
+                        enabled: false,
                       ),
                       ButtonSegment(
                         value: GameMode.zombie,
@@ -134,7 +156,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         icon: Icon(Icons.crisis_alert),
                       ),
                     ],
-                    selected: {selectedGameMode},
+                    selected: {displayMode},
                     onSelectionChanged: isHost
                         ? (values) {
                             if (values.isNotEmpty) {
