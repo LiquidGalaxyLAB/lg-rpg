@@ -74,15 +74,33 @@ class LgRepositoryImpl implements LGRepository {
 
   @override
   Future<void> startServer() async {
-    try {
-      // Open the firewall first so the controller can actually reach the server.
-      await _openFirewallPort(GameServerConfig.port);
-      await _execute(
-          'cd ~/lg-rpg-server/scripts && chmod +x start-server.sh && nohup bash -l ./start-server.sh $screenNumber > launch.log 2>&1 &');
-      log.i('LG server started successfully');
-    } catch (e) {
-      log.e(e.toString());
+    // Open the firewall first so the controller can actually reach the server.
+    await _openFirewallPort(GameServerConfig.port);
+    await _execute(
+        'cd ~/lg-rpg-server/scripts && chmod +x start-server.sh && nohup bash -l ./start-server.sh $screenNumber > launch.log 2>&1 &');
+
+    await _waitForServerHealthy();
+    log.i('LG server started and reachable on port ${GameServerConfig.port}');
+  }
+
+  Future<void> _waitForServerHealthy({
+    int attempts = 10,
+    Duration interval = const Duration(seconds: 1),
+  }) async {
+    final url = 'http://localhost:${GameServerConfig.port}/api/health';
+    for (int i = 0; i < attempts; i++) {
+      final code = await _execute(
+        'curl -s -o /dev/null -w "%{http_code}" --max-time 2 "$url" || true',
+      );
+      if (code != null && code.contains('200')) {
+        return;
+      }
+      await Future.delayed(interval);
     }
+    throw Exception(
+      'Server did not respond on port ${GameServerConfig.port} after '
+      '$attempts attempts. Check launch.log on the LG.',
+    );
   }
 
   Future<void> _openFirewallPort(int port) async {
@@ -96,33 +114,21 @@ class LgRepositoryImpl implements LGRepository {
 
   @override
   Future<void> stopServer() async {
-    try {
-      await _execute(
-          'cd ~/lg-rpg-server/scripts && chmod +x stop-server.sh && nohup bash -l ./stop-server.sh $screenNumber > stop.log 2>&1 &');
-    } catch (e) {
-      log.e(e.toString());
-    }
+    await _execute(
+        'cd ~/lg-rpg-server/scripts && chmod +x stop-server.sh && nohup bash -l ./stop-server.sh $screenNumber > stop.log 2>&1 &');
   }
 
   @override
   Future<void> launchBrowser() async {
-    try {
-      await _execute(
-          'cd ~/lg-rpg-server/scripts && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber > launch.log 2>&1 &');
-      log.i('LG browsers launched successfully');
-    } catch (e) {
-      log.e(e.toString());
-    }
+    await _execute(
+        'cd ~/lg-rpg-server/scripts && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber > launch.log 2>&1 &');
+    log.i('LG browsers launch command sent');
   }
 
   @override
   Future<void> closeBrowser() async {
-    try {
-      await _execute(
-          'cd ~/lg-rpg-server/scripts && chmod +x close-browsers.sh && nohup bash -l ./close-browsers.sh $screenNumber > stop.log 2>&1 &');
-    } catch (e) {
-      log.e(e.toString());
-    }
+    await _execute(
+        'cd ~/lg-rpg-server/scripts && chmod +x close-browsers.sh && nohup bash -l ./close-browsers.sh $screenNumber > stop.log 2>&1 &');
   }
 
   @override
@@ -139,10 +145,10 @@ class LgRepositoryImpl implements LGRepository {
   // HELPER METHODS (DRY)
   // ─────────────────────────────────────────────────────────────
 
-  /// Execute command with error handling
-  Future<void> _execute(String cmd) async {
+  /// Execute command with error handling. Returns the command's stdout.
+  Future<String?> _execute(String cmd) async {
     try {
-      await _sshService.execute(cmd);
+      return await _sshService.execute(cmd);
     } catch (e) {
       log.e('LG Command Error: $e');
       rethrow;

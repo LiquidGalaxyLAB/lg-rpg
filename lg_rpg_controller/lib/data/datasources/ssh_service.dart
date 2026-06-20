@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:typed_data";
 import "package:dartssh2/dartssh2.dart";
 import "package:lg_rpg_controller/core/constant/log_service.dart";
@@ -192,10 +193,20 @@ class SshService implements ISshService {
 
         // Use execute() for proper command execution on LG
         final session = await _client!.execute(cmd);
+
+        final stdoutBuffer = StringBuffer();
+        final stdoutSub = session.stdout.listen(
+          (data) => stdoutBuffer.write(utf8.decode(data, allowMalformed: true)),
+        );
+
         await session.done; // Wait for command to complete
+        await stdoutSub
+            .asFuture<void>()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
+        await stdoutSub.cancel();
 
         _isHealthy = true; // Command succeeded, connection is healthy
-        return 'OK';
+        return stdoutBuffer.toString();
       } catch (e) {
         log.e('SSH Execute Error (attempt ${attempt + 1}): $e');
         _closeClient();

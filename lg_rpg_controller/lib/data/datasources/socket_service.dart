@@ -28,6 +28,7 @@ class SocketService implements ISocketService {
         io.OptionBuilder()
             .setTransports(['websocket'])
             .disableAutoConnect()
+            .enableForceNew()
             .build(),
       );
 
