@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/ui/pages/controller_page.dart';
 import 'package:lg_rpg_controller/ui/pages/home_page.dart';
 import 'package:lg_rpg_controller/ui/pages/inventory_page.dart';
+import 'package:lg_rpg_controller/ui/pages/match_waiting_page.dart';
+import 'package:lg_rpg_controller/ui/pages/match_result_page.dart';
 import 'package:lg_rpg_controller/ui/pages/lg_task.dart';
 import 'package:lg_rpg_controller/ui/pages/quest_page.dart';
 import 'package:lg_rpg_controller/ui/pages/settings_page.dart';
@@ -30,6 +32,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     SettingsPage(),
     ControllerPage(),
     InventoryPage(),
+    MatchWaitingPage(),
+    MatchResultPage(),
   ];
 
   static const List<String> _pageTitles = [
@@ -40,16 +44,36 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     'Settings',
     'Controller',
     'Inventory',
+    'Match',
+    'Result',
   ];
 
   @override
   Widget build(BuildContext context) {
     final selectedIndex = ref.watch(navigationProvider);
+    // Match starts: jump to the controls.
     ref.listen(gameStartedStreamProvider, (_, next) {
       next.whenData((_) {
         ref
             .read(navigationProvider.notifier)
             .setIndex(NavigationIndex.controller);
+      });
+    });
+
+    ref.listen(playerDiedStreamProvider, (_, next) {
+      next.whenData((_) {
+        ref
+            .read(navigationProvider.notifier)
+            .setIndex(NavigationIndex.matchWaiting);
+      });
+    });
+
+    ref.listen(gameOverStreamProvider, (_, next) {
+      next.whenData((result) {
+        ref.read(lastGameResultProvider.notifier).state = result;
+        ref
+            .read(navigationProvider.notifier)
+            .setIndex(NavigationIndex.matchResult);
       });
     });
 

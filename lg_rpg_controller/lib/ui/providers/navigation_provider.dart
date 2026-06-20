@@ -8,6 +8,8 @@ abstract final class NavigationIndex {
   static const settings = 4;
   static const controller = 5;
   static const inventory = 6;
+  static const matchWaiting = 7;
+  static const matchResult = 8;
 }
 
 class NavigationNotifier extends StateNotifier<int> {
