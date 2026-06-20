@@ -6,6 +6,8 @@ import 'package:lg_rpg_controller/core/errors/exceptions.dart';
 import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_state_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_over_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/player_entity.dart';
 import 'package:lg_rpg_controller/domain/repositories/game_server_repository.dart';
@@ -22,11 +24,17 @@ class GameServerRepositoryImpl extends GameServerRepository {
   bool _isConnected = false;
   String _serverUrl = '';
 
+  bool _wantsLobby = false;
+  String _lobbyName = 'Player';
+
   final _serverStatusController =
       StreamController<GameServerEntity>.broadcast();
   final _lobbyController = StreamController<LobbyEntity?>.broadcast();
   final _gameStartedController =
       StreamController<GameStartedEntity>.broadcast();
+  final _gameStateController = StreamController<GameStateEntity>.broadcast();
+  final _gameOverController = StreamController<GameOverEntity>.broadcast();
+  final _playerDiedController = StreamController<void>.broadcast();
 
   GameServerRepositoryImpl(this._localStorage, this._socketService) {
     _setupConnectionListener();
@@ -42,8 +50,15 @@ class GameServerRepositoryImpl extends GameServerRepository {
         playerToken: _playerToken,
       ));
       if (isConnected) {
-        // Register socket event listeners once connection is active
         _registerSocketListeners();
+
+        if (_wantsLobby) {
+          log.i('Reconnected — re-joining lobby as "$_lobbyName"');
+          _socketService.emit(SocketEvent.joinLobby, {
+            'playerId': _playerToken,
+            'name': _lobbyName,
+          });
+        }
       } else {
         // Clear listeners and state on disconnect
         _unregisterSocketListeners();
@@ -100,6 +115,41 @@ class GameServerRepositoryImpl extends GameServerRepository {
         startedBy: payload['startedBy']?.toString() ?? '',
       ));
     });
+    _socketService.on(SocketEvent.gameState, (data) {
+      if (data is! Map) return;
+      final players = data['players'];
+      if (players is! List) return;
+      // Find THIS player's slice by matching our token to the broadcast id.
+      Map? mine;
+      for (final p in players) {
+        if (p is Map && p['playerId']?.toString() == _playerToken) {
+          mine = p;
+          break;
+        }
+      }
+      if (mine == null) return;
+      final match = data['match'];
+      _gameStateController.add(GameStateEntity(
+        hp: (mine['hp'] as num?)?.round() ?? 0,
+        maxHp: (mine['maxHp'] as num?)?.round() ?? 0,
+        elapsedMs:
+            match is Map ? ((match['elapsedMs'] as num?)?.round() ?? 0) : 0,
+        durationMs:
+            match is Map ? ((match['durationMs'] as num?)?.round() ?? 0) : 0,
+      ));
+    });
+    _socketService.on(SocketEvent.gameOver, (data) {
+      log.i('Game over from server: $data');
+      final payload = data is Map ? data : const {};
+      _gameOverController.add(GameOverEntity(
+        outcome: payload['outcome']?.toString() ?? 'loss',
+        survivedMs: (payload['survivedMs'] as num?)?.round() ?? 0,
+      ));
+    });
+    _socketService.on(SocketEvent.youDied, (data) {
+      log.i('This player died: $data');
+      _playerDiedController.add(null);
+    });
   }
 
   PlayerEntity _mapSocketPlayer(Map<dynamic, dynamic> player) {
@@ -114,6 +164,9 @@ class GameServerRepositoryImpl extends GameServerRepository {
     _socketService.off(SocketEvent.updateLobby);
     _socketService.off(SocketEvent.lobbyError);
     _socketService.off(SocketEvent.gameStarted);
+    _socketService.off(SocketEvent.gameState);
+    _socketService.off(SocketEvent.gameOver);
+    _socketService.off(SocketEvent.youDied);
   }
 
   @override
@@ -126,6 +179,15 @@ class GameServerRepositoryImpl extends GameServerRepository {
   @override
   Stream<GameStartedEntity> get gameStartedStream =>
       _gameStartedController.stream;
+
+  @override
+  Stream<GameStateEntity> get gameStateStream => _gameStateController.stream;
+
+  @override
+  Stream<GameOverEntity> get gameOverStream => _gameOverController.stream;
+
+  @override
+  Stream<void> get playerDiedStream => _playerDiedController.stream;
 
   @override
   bool get isGameConnected => _isConnected;
@@ -223,6 +285,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
       }
 
       await _localStorage.savePlayerName(name);
+      _wantsLobby = true;
+      _lobbyName = name;
       _socketService.emit(SocketEvent.joinLobby, {
         'playerId': _playerToken,
         'name': name,
@@ -236,6 +300,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> leaveLobby() async {
     try {
       log.i('Leaving lobby...');
+      _wantsLobby = false;
       _socketService.emit(SocketEvent.leaveLobby, {
         'playerId': _playerToken,
       });
@@ -280,6 +345,21 @@ class GameServerRepositoryImpl extends GameServerRepository {
       });
     } catch (e) {
       log.e('Failed to emit movement: $e');
+    }
+  }
+
+  @override
+  Future<void> attackPlayer() async {
+    try {
+      if (_playerToken.isEmpty) {
+        await initToken();
+      }
+      // Server cooldown-gates this; spamming the button is harmless.
+      _socketService.emit(SocketEvent.playerAttack, {
+        'playerId': _playerToken,
+      });
+    } catch (e) {
+      log.e('Failed to emit attack: $e');
     }
   }
 

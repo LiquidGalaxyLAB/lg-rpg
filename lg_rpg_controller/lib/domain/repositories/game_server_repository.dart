@@ -1,6 +1,8 @@
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_state_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_over_entity.dart';
 
 abstract class GameServerRepository {
   Stream<GameServerEntity> get serverStatusStream;
@@ -8,6 +10,12 @@ abstract class GameServerRepository {
   Stream<LobbyEntity?> get lobbyStream;
 
   Stream<GameStartedEntity> get gameStartedStream;
+
+  Stream<GameStateEntity> get gameStateStream;
+
+  Stream<GameOverEntity> get gameOverStream;
+
+  Stream<void> get playerDiedStream;
 
   bool get isGameConnected;
 
@@ -30,6 +38,8 @@ abstract class GameServerRepository {
   Future<void> endGame();
 
   Future<void> movePlayer(double dx, double dy);
+
+  Future<void> attackPlayer();
 
   Future<void> selectGameMode(String mode);
 }
