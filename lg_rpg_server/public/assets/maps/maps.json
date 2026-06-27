@@ -12,6 +12,10 @@
           "layers": {
             "ground": "Tile Layer 1"
           },
+          "objectLayers": {
+            "playerSpawn": "player_spawn",
+            "captureZone": "capture_zone"
+          },
           "tilesets": [
             {
               "name": "TilesetFloor",
@@ -25,6 +29,10 @@
           "path": "maps/pvp/pvp_map_5_screen.tmj",
           "layers": {
             "ground": "Tile Layer 1"
+          },
+          "objectLayers": {
+            "playerSpawn": "player_spawn",
+            "captureZone": "capture_zone"
           },
           "tilesets": [
             {
