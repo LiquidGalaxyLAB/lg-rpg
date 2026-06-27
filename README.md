@@ -46,188 +46,105 @@ A real-time multiplayer RPG built for [Liquid Galaxy](https://www.liquidgalaxy.e
 
 ---
 
-## Installation
+## Setup
 
-### 1. Clone the repository onto the Liquid Galaxy machine
+You only install things once. After that, everything — starting/stopping the
+server, opening the firewall port, and launching the LG screens — is driven from
+the controller app. You don't normally touch a terminal on the rig.
 
-The Flutter controller expects the server scripts at `~/lg-rpg-server/scripts/`. Clone the repo and create the expected symlink:
+### 1. Install the server (one-time, on the Liquid Galaxy machine)
+
+The controller expects the server scripts at `~/lg-rpg-server/scripts/`, so clone
+the repo and create that symlink:
 
 ```bash
 git clone https://github.com/LiquidGalaxyLAB/lg-rpg.git ~/lg-rpg
 ln -s ~/lg-rpg/lg_rpg_server ~/lg-rpg-server
 cd ~/lg-rpg-server
-```
-
-### 2. Install server dependencies
-
-```bash
-cd ~/lg-rpg-server
-cp .env.example .env       # edit PORT, TOTAL_SCREENS, MAX_PLAYERS as needed
+cp .env.example .env       # configure it — see below
 npm install
 ```
 
-### 3. Open port 3000 (required on every boot — see [Networking](#check-3--linux-firewall-blocks-port-3000-on-reboot))
+That's it on the LG side — **don't** start the server or open the port by hand;
+the controller does both for you (next section).
 
-```bash
-sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT
-```
+### Configuration (`.env`)
 
-### 4. Start the game server
+| Variable | Purpose |
+|---|---|
+| `PORT` | Server port (default `3000`). |
+| `TOTAL_SCREENS` | Number of LG screens (game screens + 1 leaderboard screen). |
+| `MAX_PLAYERS` | Max players allowed in a lobby. |
+| `CORS_ORIGIN` | Allowed web origin (`*` is fine for a local rig). |
 
-```bash
-npm start
-```
+#### AI Cheerleader (optional)
 
-The server will be available at `http://<LG-IP>:3000`.
+The game ships with an AI commentary duo (Curly & Julie) that reacts to the match
+live. It's **optional** — the game runs fine without it. It uses **Google Gemini**
+to write the dialogue and **AWS Polly** to voice it, so it needs API keys:
 
-### 5. Build and run the Flutter controller
+| Variable | Purpose |
+|---|---|
+| `CHEERLEADER_ENABLED` | Set to `true` to turn the commentary on. |
+| `GEMINI_API_KEY` | Google Gemini API key — **required** for the cheerleader to run; without it the commentary stays off. |
+| `AWS_ACCESS_KEY_ID` | AWS access key for Polly text-to-speech. |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for Polly. |
+| `AWS_REGION` | AWS region for Polly (defaults to `ap-south-1`). |
+
+Notes:
+- With `CHEERLEADER_ENABLED=true` **and** a valid `GEMINI_API_KEY`, the commentary turns on. If either is missing, it silently stays off and the game plays normally.
+- The Gemini key drives the **text**; the AWS keys drive the **voice**. If the AWS keys are missing, lines are still generated but go unvoiced (logged as a warning).
+- Get a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey), and AWS keys from the [AWS IAM console](https://console.aws.amazon.com/iam/) (the user needs `polly:SynthesizeSpeech` permission).
+
+### 2. Install the controller (on your phone)
+
+Install the APK, or build from source:
 
 ```bash
 cd lg_rpg_controller
 flutter pub get
-flutter run --dart-define=GAME_SERVER_URL=http://<LG-IP>:3000
+flutter run
 ```
+
+---
+
+## Running a session (from the controller)
+
+1. Open the app → **Settings** → enter the LG machine's **IP, SSH username,
+   password, and screen count** → **Connect**.
+2. Tap **Start the Server**. This automatically opens port 3000 on the rig (it
+   injects the firewall rule over SSH) and starts the Node server.
+3. Tap **Launch Browser** to open the game across the LG screens.
+4. Go back to **Home** → **Connect to Server** → pick a mode → **Play**.
+5. When you're done, use **Stop the Server** and **Close Browser** from Settings.
+
+Because the controller opens the port every time you press **Start the Server**,
+the firewall self-heals after a reboot — no manual `iptables` step needed.
+
+---
+
+## Running the server manually (optional / for development)
+
+If you'd rather run the server yourself on the LG instead of from the controller,
+you must open the firewall port yourself first — this is the same rule the
+controller injects automatically:
+
+```bash
+sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT   # only needed for manual starts
+cd ~/lg-rpg-server
+npm start
+```
+
+The server is then available at `http://<LG-IP>:3000`. To make the port survive
+reboots without the controller, see [ISSUES.md](./ISSUES.md).
 
 ---
 
 ## Networking: Known Issues
 
-Before the game can run over a local network, three common infrastructure problems must be verified and resolved. **Work through all three checks every time you set up on a new network.**
+If a phone can't reach the server over the local network, it's usually one of three things: a hotspot routing trap, a VirtualBox adapter priority issue, or the firewall blocking port 3000 after a reboot.
 
----
-
-### Check 1 — Android Hotspot Routing Trap
-
-**Symptom:** `OS Error: Connection timed out, errno = 110` from the Flutter app on the hotspot phone, while a second phone on the same hotspot reaches the server without issue.
-
-**Root cause (the "split-brain" network):**
-When a phone both hosts a Wi-Fi hotspot *and* runs the Flutter app, Android internally routes that app's outbound traffic through the cellular interface (5G/LTE) rather than through the local hotspot subnet. The local IP (`10.x.x.x`) never resolves on the global internet and the connection times out.
-
-**Fix:**
-
-Use a different phone or home router as the Wi-Fi host. The Flutter phone becomes a normal Wi-Fi client and routes all traffic through the local network correctly.
-
----
-
-### Check 2 — VirtualBox NAT Adapter Has Higher Priority than Host Network
-
-**Symptom:** The Node server starts and port 3000 is open, but the Flutter app still cannot connect. A phone on the same network as the LG machine gets no response, or the connection times out immediately.
-
-**Root cause:**
-The Liquid Galaxy Ubuntu machine typically has two network adapters in VirtualBox:
-
-| Adapter | Interface | IP range | Purpose |
-|---|---|---|---|
-| NAT | `eth0` / `enp0s3` | `10.0.2.x` (internal) | Internet access via the Windows host |
-| Bridged / Host-Only | `eth1` / `enp0s8` | same subnet as phones | Reachable by other devices on the local network |
-
-When Ubuntu assigns a **lower metric** to the NAT adapter's default route, the NAT adapter has higher routing priority. Even though the server listens on all interfaces, the VM sends reply packets back out through the NAT adapter — an internal VirtualBox address that no phone can route to. The connection silently fails.
-
-**How to verify:**
-
-SSH into the Liquid Galaxy machine and run:
-
-```bash
-route -n
-```
-
-In the output, look at the **Metric** column for rows where Destination is `0.0.0.0` (the default route). A **lower metric = higher priority**.
-
-```
-# Problem: NAT adapter (eth0) has metric 100, host adapter (eth1) has metric 600
-Kernel IP routing table
-Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
-0.0.0.0         10.0.2.2        0.0.0.0         UG    100    0        0 eth0   ← NAT wins
-0.0.0.0         10.110.111.1    0.0.0.0         UG    600    0        0 eth1   ← host network loses
-```
-
-If the NAT adapter (`eth0`) has a lower metric than the host adapter (`eth1`), this is the problem.
-
-A correct routing table looks like:
-
-```
-# OK: host network adapter has lower metric (higher priority)
-Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
-0.0.0.0         10.110.111.1    0.0.0.0         UG    100    0        0 eth1   ← host network wins
-0.0.0.0         10.0.2.2        0.0.0.0         UG    700    0        0 eth0   ← NAT loses
-```
-
-**Fix (Ubuntu 16.04, survives reboots):**
-
-Edit `/etc/network/interfaces` and set an explicit metric for both adapters:
-
-```
-auto eth0
-iface eth0 inet dhcp
-    metric 700
-
-auto eth1
-iface eth1 inet dhcp
-    metric 100
-```
-
-Apply without rebooting:
-
-```bash
-sudo ifdown eth0 && sudo ifup eth0
-route -n   # confirm the metrics changed
-```
-
----
-
-### Check 3 — Linux Firewall Blocks Port 3000 on Reboot
-
-**Symptom:** After any VM reboot, the Flutter app gets an immediate `Socket Unreachable` error. The Node server starts successfully but packets are silently dropped.
-
-**Root cause:**
-Liquid Galaxy Ubuntu rigs ship with strict `iptables` rules that block incoming traffic on all non-whitelisted ports. These rules live in RAM only — **every reboot wipes them**, including any port-3000 rule you added in a previous session.
-
-**How to verify:**
-
-SSH into the Liquid Galaxy machine and run:
-
-```bash
-sudo iptables -L INPUT -n --line-numbers | grep 3000
-```
-
-If the command returns **no output**, port 3000 is currently blocked.
-
-**Fix — manual (must be repeated after every reboot):**
-
-```bash
-sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT
-```
-
-**Fix — permanent (survives reboots):**
-
-The key point: `iptables-persistent` saves whatever rules are currently loaded in memory. You must **add the port-3000 rule first**, then save — otherwise the saved ruleset will not include it.
-
-```bash
-# Step 1 — open port 3000 (if not already done)
-sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT
-
-# Step 2 — install iptables-persistent
-#   When prompted "Save current IPv4 rules?", answer Yes
-sudo apt-get install -y iptables-persistent
-
-# Step 3 — save the current rules to disk (including port 3000)
-sudo netfilter-persistent save
-# This writes to /etc/iptables/rules.v4, which is loaded automatically on boot
-
-# Verify the rule was saved
-grep 3000 /etc/iptables/rules.v4
-# Expected output:  -A INPUT -p tcp --dport 3000 -j ACCEPT
-```
-
-**Fix — automated via the controller:**
-
-The Flutter controller automates the manual fix. When you tap **Start Server** in the Settings page, the app:
-
-1. Generates a `setup.sh` script containing the `iptables` unlock command.
-2. Uploads it to the LG machine via SFTP.
-3. Executes it over SSH using `echo "$password" | sudo -S bash setup.sh` — opening the port moments before the Node server is launched.
-
-This means the port is always open before the server starts, without requiring a terminal session on the rig.
+See **[ISSUES.md](./ISSUES.md)** for symptoms, checks, and fixes for each.
 
 ---
 
