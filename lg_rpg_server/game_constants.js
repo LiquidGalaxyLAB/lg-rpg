@@ -51,12 +51,12 @@ export const SERVER_CONFIG = Object.freeze({
 });
 
 export const PLAYER_SIZE = Object.freeze({
-  halfWidth: readPositiveIntegerEnv('PLAYER_HALF_WIDTH', 60),
-  height: readPositiveIntegerEnv('PLAYER_HEIGHT', 152),
+  halfWidth: readPositiveIntegerEnv('PLAYER_HALF_WIDTH', 19),
+  height: readPositiveIntegerEnv('PLAYER_HEIGHT', 48),
 });
 
 export const PLAYER_DEFAULTS = Object.freeze({
-  speed: 5,
+  speed: 1.3,
   maxHealth: 100,
   attackRange: 170, attackDamage: 12,
   attackCooldownMs: 350,
@@ -72,8 +72,20 @@ export const MATCH = Object.freeze({
   winDurationMs: 180000,
 });
 
+// Zone Capture (PvP) timings. A round = lockMs (confined in spawn) + roundDurationMs.
+export const PVP = Object.freeze({
+  lockMs: 4000,
+  graceMs: 3000,
+  roundDurationMs: 120000,
+  respawnDelayMs: 4000,
+  invulnMs: 2000,
+});
+
+export const PVP_TEAMS = Object.freeze(['teamA', 'teamB']);
+
 export const SPAWN = Object.freeze({
   edgePadding: 28, minPlayerSpacing: 140, minEnemySpacing: 40, maxAttempts: 16,
+  enemyDistanceFalloff: 300,
 });
 
 export const ENEMY_SPAWN = Object.freeze({
@@ -89,11 +101,20 @@ export const CHEERLEADER = Object.freeze({
 });
 
 export const ENEMY_MOVEMENT = Object.freeze({
-  speed: 2.2, aggroRange: 1050, leashMultiplier: 1.5, commitForLife: false, separationRadius: 44, separationStrength: 0.5,
+  speed: 1,
+  aggroRange: 1050,
+  leashMultiplier: 1.5,
+  commitForLife: false,
+  separationRadius: 28,
+  separationStrength: 0.5,
+  pathCellSize: 16,
+  agentRadius: 14,
+  stuckEpsilon: 0.4,
+  stuckTicks: 8,
 });
 
 export const ENEMY_COMBAT = Object.freeze({
-  health: 30, hitboxHalfWidth: 28, hitboxHeight: 56, hitboxOriginY: 1, attackRange: 56, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700,
+  health: 30, hitboxHalfWidth: 16, hitboxHeight: 32, hitboxOriginY: 1, attackRange: 38, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700,
 });
 
 // Stats for different zombie enemy types.
@@ -105,31 +126,31 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     type: 'rat',
     speed: 2.8,
     health: 15,
-    hitboxHalfWidth: 18,
-    hitboxHeight: 30,
+    hitboxHalfWidth: 9,
+    hitboxHeight: 16,
   },
   {
     type: 'slime',
     speed: 1.6,
     health: 50,
-    hitboxHalfWidth: 34,
-    hitboxHeight: 44,
+    hitboxHalfWidth: 18,
+    hitboxHeight: 24,
   },
   {
     type: 'bat',
     speed: 2.8,
     health: 15,
     attackDamage: 5,
-    hitboxHalfWidth: 34,
-    hitboxHeight: 48,
+    hitboxHalfWidth: 14,
+    hitboxHeight: 24,
     hitboxOriginY: 0.5,
   },
   {
     type: 'flying_eye',
     speed: 2.6,
     health: 20,
-    hitboxHalfWidth: 42,
-    hitboxHeight: 60,
+    hitboxHalfWidth: 16,
+    hitboxHeight: 26,
     hitboxOriginY: 0.5,
   },
   {
@@ -139,8 +160,8 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     commitForLife: true,
     health: 80,
     attackDamage: 20,
-    hitboxHalfWidth: 34,
-    hitboxHeight: 50,
+    hitboxHalfWidth: 18,
+    hitboxHeight: 28,
     maxOnMap: 3,
   },
 ]);

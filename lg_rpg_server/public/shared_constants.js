@@ -13,6 +13,7 @@ export const SOCKET_EVENTS = Object.freeze({
   GAME_STATE: 'gameState',
   GAME_OVER: 'gameOver',
   YOU_DIED: 'youDied',
+  YOU_RESPAWNED: 'youRespawned',
   MATCH_ANNOUNCEMENT: 'matchAnnouncement',
   CHEERLEADER_AUDIO: 'cheerleaderAudio',
   CHEERLEADER_SPOKEN: 'cheerleaderSpoken',
