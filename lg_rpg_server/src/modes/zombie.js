@@ -8,7 +8,8 @@ import {
   ZOMBIE_ENEMY_TYPES,
 } from '../../game_constants.js';
 import { findSpawnPoint } from '../lib/spawn.js';
-import { clamp, createPathfinder, distance, distanceSq } from '../lib/pathfinding.js';
+import { canStandAt, moveWithCollision } from '../lib/collision.js';
+import { createPathfinder, distance, distanceSq } from '../lib/pathfinding.js';
 
 // Combines default enemy stats with any type-specific overrides.
 function resolveStats(pick) {
@@ -46,6 +47,13 @@ function enemyHitbox(enemy) {
   );
 }
 
+function enemyCollisionBodyFromStats(stats) {
+  return {
+    halfWidth: Math.max(6, Math.min(14, stats.hitboxHalfWidth)),
+    height: 8,
+  };
+}
+
 function distanceSqBetweenHitboxes(a, b) {
   const dx = a.left > b.right ? a.left - b.right : b.left > a.right ? b.left - a.right : 0;
   const dy = a.top > b.bottom ? a.top - b.bottom : b.top > a.bottom ? b.top - a.bottom : 0;
@@ -71,14 +79,22 @@ function damageEnemy(enemy, damage) {
 export class ZombieMode {
   constructor(map) {
     this.bounds = map.bounds;
+    this.collision = map.collision;
     this.zones = map.zones.enemySpawn || [];
     this.enemies = new Map();
     this.nextId = 1;
     this.warmupTimer = null;
     this.spawnTimer = null;
     this.spawnStartedAt = 0;
+    // Latest player snapshot, refreshed each tick, so spawning can bias toward nearby players.
+    this.activePlayers = [];
     // Pathfinder instance for navigation.
-    this.pathfinder = createPathfinder({ bounds: this.bounds });
+    this.pathfinder = createPathfinder({
+      bounds: this.bounds,
+      collision: this.collision,
+      cellSize: ENEMY_MOVEMENT.pathCellSize,
+      agentRadius: ENEMY_MOVEMENT.agentRadius,
+    });
   }
 
   // Calculates the spawn interval, decreasing over time.
@@ -125,13 +141,6 @@ export class ZombieMode {
     if (this.zones.length === 0 || this.enemies.size >= this.currentCap()) return;
 
     const occupied = Array.from(this.enemies.values());
-    const point = findSpawnPoint(this.zones, occupied, {
-      edgePadding: SPAWN.edgePadding,
-      minSpacing: SPAWN.minEnemySpacing,
-      maxAttempts: SPAWN.maxAttempts,
-    });
-    if (!point) return;
-
     const available = ZOMBIE_ENEMY_TYPES.filter((t) => {
       if (t.maxOnMap == null) return true;
       return occupied.filter((e) => e.type === t.type && !e.dying).length < t.maxOnMap;
@@ -140,6 +149,23 @@ export class ZombieMode {
 
     const pick = available[Math.floor(Math.random() * available.length)];
     const stats = resolveStats(pick);
+    const point = findSpawnPoint(this.zones, occupied, {
+      edgePadding: SPAWN.edgePadding,
+      minSpacing: SPAWN.minEnemySpacing,
+      maxAttempts: SPAWN.maxAttempts * 4,
+      targets: this.activePlayers.map((p) => ({ x: p.x, y: p.y })),
+      distanceFalloff: SPAWN.enemyDistanceFalloff,
+      isValidPoint: (candidate) => {
+        if (!canStandAt(this.collision, candidate.x, candidate.y, enemyCollisionBodyFromStats(stats))) {
+          return false;
+        }
+        // Reject spawns in pockets no player could ever be chased from (sealed by walls/water).
+        if (this.activePlayers.length === 0) return true;
+        return this.activePlayers.some((p) => this.pathfinder.reachable(candidate, p));
+      },
+    });
+    if (!point) return;
+
     const id = `e${this.nextId++}`;
     this.enemies.set(id, {
       id,
@@ -156,10 +182,53 @@ export class ZombieMode {
     });
   }
 
+  moveEnemy(enemy, deltaX, deltaY) {
+    const body = enemyCollisionBodyFromStats(enemy.stats);
+    const moved = moveWithCollision(
+      this.collision,
+      enemy,
+      deltaX,
+      deltaY,
+      {
+        minX: body.halfWidth,
+        maxX: this.bounds.width - body.halfWidth,
+        minY: body.height,
+        maxY: this.bounds.height,
+      },
+      body,
+    );
+    enemy.x = moved.x;
+    enemy.y = moved.y;
+  }
+
+  // Nudges a wedged enemy sideways to slip free of wall corners or crowd pileups.
+  unstick(enemy, dir, beforeX, beforeY) {
+    const wanted = dir.x !== 0 || dir.y !== 0;
+    const moved = Math.hypot(enemy.x - beforeX, enemy.y - beforeY);
+    enemy.stuckTicks = wanted && moved < ENEMY_MOVEMENT.stuckEpsilon ? (enemy.stuckTicks || 0) + 1 : 0;
+    if (enemy.stuckTicks < ENEMY_MOVEMENT.stuckTicks) return;
+
+    enemy.stuckTicks = 0;
+    const sign = enemy.stuckSign || 1;
+    const nudge = enemy.stats.speed;
+    // Perpendicular to the blocked direction = along the wall.
+    const px = -dir.y * nudge;
+    const py = dir.x * nudge;
+    const sx = enemy.x;
+    const sy = enemy.y;
+    this.moveEnemy(enemy, px * sign, py * sign);
+    if (Math.hypot(enemy.x - sx, enemy.y - sy) < ENEMY_MOVEMENT.stuckEpsilon) {
+      // That side was blocked too; try the other side next time.
+      enemy.stuckSign = -sign;
+      this.moveEnemy(enemy, px * -sign, py * -sign);
+    }
+  }
+
   // Advances the simulation by one tick, updating enemy AI, movements, and attacks.
   tick(players) {
     const now = Date.now();
     const playerDamage = [];
+    this.activePlayers = players;
 
     // Remove dead enemies after their death animation plays.
     for (const [id, enemy] of this.enemies) {
@@ -201,23 +270,25 @@ export class ZombieMode {
         }
       } else {
         const dir = this.pathfinder.direction(enemy, target);
-        enemy.x += dir.x * enemy.stats.speed;
-        enemy.y += dir.y * enemy.stats.speed;
+        const beforeX = enemy.x;
+        const beforeY = enemy.y;
+        this.moveEnemy(enemy, dir.x * enemy.stats.speed, dir.y * enemy.stats.speed);
+        this.unstick(enemy, dir, beforeX, beforeY);
       }
     }
 
     this.separate();
 
     for (const enemy of this.enemies.values()) {
-      enemy.x = clamp(enemy.x, 0, this.bounds.width);
-      enemy.y = clamp(enemy.y, 0, this.bounds.height);
+      this.moveEnemy(enemy, 0, 0);
     }
 
     return { playerDamage };
   }
 
   // Processes damage dealt by a player's attack to nearby enemies.
-  playerAttack(hitbox, range, damage) {
+  // `attacker` is unused here but keeps a uniform signature across modes.
+  playerAttack(attacker, hitbox, range, damage) {
     const attackerHitbox = hitbox;
     let hits = 0;
     let kills = 0;
@@ -283,10 +354,8 @@ export class ZombieMode {
         const push = ((radius - d) / 2) * strength;
         const ux = dx / d;
         const uy = dy / d;
-        a.x -= ux * push;
-        a.y -= uy * push;
-        b.x += ux * push;
-        b.y += uy * push;
+        this.moveEnemy(a, -ux * push, -uy * push);
+        this.moveEnemy(b, ux * push, uy * push);
       }
     }
   }

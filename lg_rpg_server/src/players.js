@@ -2,6 +2,7 @@ import { PLAYER_SIZE, SOCKET_EVENTS, SPAWN } from '../game_constants.js';
 import { io } from './app.js';
 import { state } from './state.js';
 import { findSpawnPoint } from './lib/spawn.js';
+import { canStandAt } from './lib/collision.js';
 
 // Determines a valid spawn point for a player, avoiding collision with existing players.
 export function spawnPlayerPosition() {
@@ -11,7 +12,8 @@ export function spawnPlayerPosition() {
   return findSpawnPoint(zones, occupied, {
     edgePadding: SPAWN.edgePadding,
     minSpacing: SPAWN.minPlayerSpacing,
-    maxAttempts: SPAWN.maxAttempts,
+    maxAttempts: SPAWN.maxAttempts * 4,
+    isValidPoint: (point) => canStandAt(state.currentMap.collision, point.x, point.y),
   });
 }
 
