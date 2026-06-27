@@ -49,6 +49,7 @@ async function startGame() {
         this.serverEnemies = [];
         this.serverHearts = [];
         this.serverMatch = null;
+        this.serverPvp = null;
         this.playerSprites = new Map();
         this.enemySprites = new Map();
       }
@@ -75,16 +76,31 @@ async function startGame() {
       // Prepares the map, tile layers, event listeners, and sprite animations.
       create() {
         const map = this.make.tilemap({ key: mapConfig.key, tileWidth: 16, tileHeight: 16 });
-        const tilesets = (mapConfig.tilesets || []).map(t => map.addTilesetImage(t.name, t.key)).filter(Boolean);
+        const tilesets = (mapConfig.tilesets || [])
+          .map(t => map.addTilesetImage(t.name, t.key, undefined, undefined, undefined, undefined, t.firstgid))
+          .filter(Boolean);
         this.cameraOffset = (screenNumber - 1) * GAME_VIEW.screenWidth;
-        map.createLayer(mapConfig.layers.ground, tilesets, -this.cameraOffset, 0);
+        this.mapLayers = [];
+        const layerNames = [...new Set(Object.values(mapConfig.layers || {}).filter(Boolean))];
+        layerNames.forEach((layerName, index) => {
+          const layer = map.createLayer(layerName, tilesets, -this.cameraOffset, 0);
+          if (layer) {
+            layer.setDepth(index);
+            this.mapLayers.push(layer);
+          } else {
+            console.warn(`Map layer not found: ${layerName}`);
+          }
+        });
         this.heartGraphics = this.add.graphics().setDepth(1);
+        // Drawn above the ground but below sprites (sprites use depth = world y).
+        this.pvpGraphics = this.add.graphics().setDepth(2);
 
         socket.on(SOCKET_EVENTS.GAME_STATE, d => {
           this.serverPlayers = d.players || [];
           this.serverEnemies = d.enemies || [];
           this.serverHearts = d.hearts || [];
           this.serverMatch = d.match || null;
+          this.serverPvp = d.pvp || null;
         });
 
         socket.on(SOCKET_EVENTS.GAME_OVER, () => {
@@ -133,6 +149,33 @@ async function startGame() {
           this.syncSprites(this.serverEnemies, this.enemySprites, 'id', e => this.resolveEnemyConfig(e));
         }
         this.drawHearts();
+        this.drawPvp();
+      }
+
+      // Renders the PvP capture zone, spawn box, and team markers under each player.
+      drawPvp() {
+        const g = this.pvpGraphics.clear();
+        const pvp = this.serverPvp;
+        if (!pvp) return;
+        const off = this.cameraOffset, W = GAME_VIEW.screenWidth;
+        const teamColor = (t) => (t === 'teamA' ? 0x1f6feb : t === 'teamB' ? 0xda3633 : 0xffffff);
+
+        if (pvp.zone) {
+          const z = pvp.zone, c = teamColor(z.currentTeam);
+          g.fillStyle(c, 0.18).fillRect(z.x - off, z.y, z.width, z.height);
+          g.lineStyle(3, c, 0.9).strokeRect(z.x - off, z.y, z.width, z.height);
+        }
+        if (pvp.spawnBox && pvp.phase === 'lock') {
+          const b = pvp.spawnBox;
+          g.lineStyle(2, 0xffd166, 0.85).strokeRect(b.x - off, b.y, b.width, b.height);
+        }
+        for (const p of this.serverPlayers) {
+          if (!p.team) continue;
+          const lx = p.x - off;
+          if (lx < -40 || lx > W + 40) continue;
+          g.fillStyle(teamColor(p.team), p.dead ? 0.25 : 0.9);
+          g.fillCircle(lx, p.y - 2, 7);
+        }
       }
 
       // Renders the healing items on the screen.
