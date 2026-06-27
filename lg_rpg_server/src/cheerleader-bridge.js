@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import {
+  ENEMY_SPAWN,
+  GAME_MODES,
   GAME_MODE_LABELS,
   MATCH,
   PLAYER_DEFAULTS,
@@ -65,6 +67,7 @@ function cheerleaderPlayerSnapshot() {
       maxHp,
       kills: p.kills || 0,
       status,
+      team: p.team || null,
     };
   });
 }
@@ -75,14 +78,41 @@ function cheerleaderEnemyCount() {
   return state.activeMode.getStatePatch().enemies?.length || 0;
 }
 
-// Returns the overall match context needed by the cheerleader.
+// Returns mode-aware match context for the cheerleader commentator.
 export function getCheerleaderContext() {
-  const elapsedMs = matchElapsedMs();
-  return {
-    mode: GAME_MODE_LABELS[state.selectedMode] || state.selectedMode,
-    elapsedSeconds: Math.floor(elapsedMs / 1000),
-    timeRemaining: Math.max(0, Math.ceil((MATCH.winDurationMs - elapsedMs) / 1000)),
-    enemyCount: cheerleaderEnemyCount(),
+  const modeId = state.selectedMode;
+  const base = {
+    mode: GAME_MODE_LABELS[modeId] || modeId,
+    modeId,
     players: cheerleaderPlayerSnapshot(),
+  };
+
+  // PvP Zone Capture: phase + team scores from the live mode patch.
+  if (modeId === GAME_MODES.PVP) {
+    const pvp = state.activeMode?.getStatePatch?.().pvp || null;
+    const phase = pvp?.phase || 'lock';
+    const remainingMs = phase === 'lock' ? pvp?.lockRemainingMs : pvp?.roundRemainingMs;
+    return {
+      ...base,
+      phase,
+      timeRemaining: Math.max(0, Math.ceil((remainingMs || 0) / 1000)),
+      scores: pvp?.scores || { teamA: 0, teamB: 0 },
+      zoneTeam: pvp?.zone?.currentTeam || 'neutral',
+    };
+  }
+
+  // Zombie: a warm-up/grace window (no enemies) then the survive timer.
+  const elapsedMs = matchElapsedMs();
+  const graceMs = ENEMY_SPAWN.warmupMs;
+  const inGrace = elapsedMs < graceMs;
+  return {
+    ...base,
+    phase: inGrace ? 'grace' : 'survive',
+    graceRemaining: Math.max(0, Math.ceil((graceMs - elapsedMs) / 1000)),
+    elapsedSeconds: Math.floor(Math.max(0, elapsedMs - graceMs) / 1000),
+    timeRemaining: inGrace
+      ? Math.ceil(MATCH.winDurationMs / 1000)
+      : Math.max(0, Math.ceil((graceMs + MATCH.winDurationMs - elapsedMs) / 1000)),
+    enemyCount: cheerleaderEnemyCount(),
   };
 }

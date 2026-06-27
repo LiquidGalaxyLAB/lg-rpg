@@ -140,7 +140,11 @@ export function createCheerleader({ drain, play, getMatchContext }) {
     if (transcript.length > CHEERLEADER.maxTranscript) transcript.shift();
   };
 
-  const matchSummary = (recentEvent) => buildSummary({ ...getMatchContext(), recentEvent });
+  // Builds the prompt summary plus the mode id, so prompts can select mode facts.
+  const matchSummary = (recentEvent) => {
+    const ctx = getMatchContext();
+    return { summary: buildSummary({ ...ctx, recentEvent }), modeId: ctx.modeId };
+  };
 
   const speak = async (line, speaker = 'Curly') => {
     if (!line || !running) return;
@@ -164,15 +168,19 @@ export function createCheerleader({ drain, play, getMatchContext }) {
 
   const doIntro = async () => {
     if (!running) return;
-    try { drain(); await generateAndPlayBanter(introPrompt(matchSummary('the match is about to start'))); }
-    catch (err) { console.warn('[cheerleader] intro failed:', err?.message || err); }
+    try {
+      drain();
+      const { summary, modeId } = matchSummary('the match is about to start');
+      await generateAndPlayBanter(introPrompt(summary, modeId));
+    } catch (err) { console.warn('[cheerleader] intro failed:', err?.message || err); }
   };
 
   const doTick = async () => {
     if (!running) return;
     try {
       const recent = summarize(drain()) || 'no new events — the fight is still on';
-      await generateAndPlayBanter(banterPrompt(matchSummary(recent), transcript));
+      const { summary, modeId } = matchSummary(recent);
+      await generateAndPlayBanter(banterPrompt(summary, transcript, modeId));
     } catch (err) { console.warn('[cheerleader] tick failed:', err?.message || err); }
   };
 
