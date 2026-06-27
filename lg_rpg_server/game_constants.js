@@ -74,6 +74,8 @@ export const MATCH = Object.freeze({
 
 // Zone Capture (PvP) timings. A round = lockMs (confined in spawn) + roundDurationMs.
 export const PVP = Object.freeze({
+  // Two teams need at least one player each, so a PvP match can't start solo.
+  minPlayers: 2,
   lockMs: 4000,
   graceMs: 3000,
   roundDurationMs: 120000,
