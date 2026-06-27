@@ -8,7 +8,7 @@ import {
 } from '../game_constants.js';
 import { io } from './app.js';
 import { state, matchElapsedMs } from './state.js';
-import { clamp } from './lib/pathfinding.js';
+import { moveWithCollision } from './lib/collision.js';
 import { emitGameEvent } from './cheerleader-bridge.js';
 import { endMatch } from './match.js';
 import { everyPlayerDead, playerHitbox } from './players.js';
@@ -16,12 +16,33 @@ import { everyPlayerDead, playerHitbox } from './players.js';
 // Starts the core game loop to update positions and broadcast state.
 export function startGameLoop() {
   setInterval(() => {
-    // Update player positions within map boundaries.
+    // Move players within map bounds, confined to the spawn box during PvP lock phase.
     if (state.worldBounds) {
+      const confine = state.activeMode?.getConfinement?.() || null;
+      const bounds = confine
+        ? {
+            minX: confine.x + PLAYER_SIZE.halfWidth,
+            maxX: confine.x + confine.width - PLAYER_SIZE.halfWidth,
+            minY: confine.y + PLAYER_SIZE.height,
+            maxY: confine.y + confine.height,
+          }
+        : {
+            minX: PLAYER_SIZE.halfWidth,
+            maxX: state.worldBounds.width - PLAYER_SIZE.halfWidth,
+            minY: PLAYER_SIZE.height,
+            maxY: state.worldBounds.height,
+          };
       for (const player of state.players.values()) {
         if (player.dead) continue;
-        player.x = clamp(player.x + player.velocityX, PLAYER_SIZE.halfWidth, state.worldBounds.width - PLAYER_SIZE.halfWidth);
-        player.y = clamp(player.y + player.velocityY, PLAYER_SIZE.height, state.worldBounds.height);
+        const moved = moveWithCollision(
+          state.currentMap?.collision,
+          player,
+          player.velocityX,
+          player.velocityY,
+          bounds,
+        );
+        player.x = moved.x;
+        player.y = moved.y;
       }
     }
 
@@ -75,10 +96,17 @@ export function startGameLoop() {
         }
       }
 
-      // End the match if all players die or the timer runs out.
+      // End the match via mode result (PvP) or death/timer (co-op).
       if (state.matchActive && state.players.size > 0) {
-        if (everyPlayerDead()) endMatch('all-dead');
-        else if (matchElapsedMs() >= MATCH.winDurationMs) endMatch('timer-win');
+        if (typeof state.activeMode.checkMatchEnd === 'function') {
+          const result = state.activeMode.checkMatchEnd();
+          if (result) endMatch(result.reason, result);
+        } else if (everyPlayerDead()) {
+          endMatch('all-dead');
+        } else if (matchElapsedMs() >= ENEMY_SPAWN.warmupMs + MATCH.winDurationMs) {
+          // Match = a warm-up/grace window (no enemies) followed by the survive timer.
+          endMatch('timer-win');
+        }
       }
     }
 
@@ -104,10 +132,16 @@ export function startGameLoop() {
         kills: p.kills || 0,
         dead: p.dead,
         action: p.action || null,
+        team: p.team || null,
       })),
       hearts: state.heartField ? state.heartField.list() : [],
+      // durationMs = warmup + survive so the on-screen clock starts at the full winDurationMs.
       match: state.matchActive
-        ? { elapsedMs: matchElapsedMs(), durationMs: MATCH.winDurationMs, warmupMs: ENEMY_SPAWN.warmupMs }
+        ? {
+            elapsedMs: matchElapsedMs(),
+            durationMs: ENEMY_SPAWN.warmupMs + MATCH.winDurationMs,
+            warmupMs: ENEMY_SPAWN.warmupMs,
+          }
         : null,
       ...modePatch,
     });

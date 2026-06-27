@@ -4,7 +4,10 @@ import { SOCKET_EVENTS } from './shared_constants.js';
 const socket = io();
 const $ = (id) => document.getElementById(id);
 
-const state = { connected: false, modeLabel: 'Zombie Raid', players: [], match: null, final: null };
+const state = { connected: false, modeLabel: 'Zombie Raid', players: [], match: null, pvp: null, final: null };
+
+// Maps a PvP team id to its display colour name.
+const teamName = (t) => (t === 'teamA' ? 'Blue' : t === 'teamB' ? 'Red' : '—');
 
 // Utility helpers to escape HTML, format the match clock, and rank players by kills.
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -24,6 +27,15 @@ function renderResult() {
   const panel = $('result');
   panel.classList.remove('win', 'lose');
   if (state.final) {
+    // PvP result carries a winning team; co-op result carries an outcome.
+    if ('winner' in state.final) {
+      const w = state.final.winner, s = state.final.scores || {};
+      panel.classList.add(w ? 'win' : 'lose');
+      $('clockLabel').textContent = w ? `${teamName(w)} Team Wins` : 'Draw';
+      $('clockValue').textContent = w ? 'VICTORY' : 'DRAW';
+      $('resultSub').textContent = `Blue ${s.teamA ?? 0} — ${s.teamB ?? 0} Red`;
+      return;
+    }
     const won = state.final.outcome === 'win';
     panel.classList.add(won ? 'win' : 'lose');
     $('clockLabel').textContent = won ? 'Squad Survived' : 'Defeated';
@@ -32,6 +44,13 @@ function renderResult() {
     return;
   }
   $('resultSub').textContent = '';
+  if (state.pvp) {
+    const p = state.pvp, lock = p.phase === 'lock', s = p.scores || {};
+    $('clockLabel').textContent = lock ? 'Locked In' : 'Zone Battle';
+    $('clockValue').textContent = formatClock(lock ? p.lockRemainingMs : p.roundRemainingMs);
+    $('resultSub').textContent = `Blue ${s.teamA ?? 0} — ${s.teamB ?? 0} Red`;
+    return;
+  }
   if (!state.match) {
     $('clockLabel').textContent = 'Waiting';
     $('clockValue').textContent = '0:00';
@@ -119,9 +138,9 @@ function playNextLine() {
 socket.on('connect', () => { state.connected = true; socket.emit(SOCKET_EVENTS.REGISTER_CHEERLEADER_SCREEN); renderStatus(); });
 socket.on('disconnect', () => { state.connected = false; stopCommentary(); renderStatus(); });
 socket.on(SOCKET_EVENTS.UPDATE_LOBBY, (p = {}) => { if (!state.match && !state.final) { state.players = p.players || []; render(); } });
-socket.on(SOCKET_EVENTS.GAME_STARTED, (p = {}) => { stopCommentary(); state.final = null; state.modeLabel = titleCase(p.selectedMode || state.modeLabel); render(); });
-socket.on(SOCKET_EVENTS.GAME_STATE, (p = {}) => { state.players = p.players || []; state.match = p.match || null; render(); });
-socket.on(SOCKET_EVENTS.GAME_OVER, (p = {}) => { state.final = p; state.match = null; render(); });
+socket.on(SOCKET_EVENTS.GAME_STARTED, (p = {}) => { stopCommentary(); state.final = null; state.pvp = null; state.modeLabel = titleCase(p.selectedMode || state.modeLabel); render(); });
+socket.on(SOCKET_EVENTS.GAME_STATE, (p = {}) => { state.players = p.players || []; state.match = p.match || null; state.pvp = p.pvp || null; render(); });
+socket.on(SOCKET_EVENTS.GAME_OVER, (p = {}) => { state.final = p; state.match = null; state.pvp = null; render(); });
 socket.on(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, (p = {}) => p.message && showBanner(p.message, p.durationMs));
 socket.on(SOCKET_EVENTS.CHEERLEADER_AUDIO, (p = {}) => {
   if (!p.line) return;

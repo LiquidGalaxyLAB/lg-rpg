@@ -1,6 +1,8 @@
 import {
+  GAME_MODES,
   GAME_PHASES,
   PLAYER_DEFAULTS,
+  PVP,
   SERVER_CONFIG,
   SOCKET_EVENTS,
   VALID_GAME_MODES,
@@ -123,6 +125,7 @@ export function registerSocketHandlers() {
 
       // Execute attack through the active game mode simulation.
       const result = state.activeMode.playerAttack(
+        player,
         playerHitbox(player),
         PLAYER_DEFAULTS.attackRange,
         PLAYER_DEFAULTS.attackDamage,
@@ -187,6 +190,14 @@ export function registerSocketHandlers() {
         return;
       }
 
+      // PvP is team-vs-team, so it needs at least two players to start.
+      if (state.selectedMode === GAME_MODES.PVP && state.players.size < PVP.minPlayers) {
+        socket.emit(SOCKET_EVENTS.LOBBY_ERROR, {
+          message: `PvP needs at least ${PVP.minPlayers} players. Wait for another player to join.`,
+        });
+        return;
+      }
+
       console.log(`[game] started in ${state.selectedMode} mode by ${player.name} (${player.playerId})`);
       cancelEmptyGrace();
       state.phase = GAME_PHASES.PLAYING;
@@ -196,10 +207,19 @@ export function registerSocketHandlers() {
       state.currentMap = loadMap(publicDir, selectedMapConfig.map);
       state.worldBounds = state.currentMap.bounds;
 
-      // Place all players at valid spawn positions.
-      for (const p of state.players.values()) {
-        const spawn = spawnPlayerPosition();
-        if (spawn) { p.x = spawn.x; p.y = spawn.y; }
+      // Create the game mode simulation and reset player stats.
+      if (state.activeMode) state.activeMode.stop();
+      state.activeMode = createMode(state.selectedMode, state.currentMap);
+      startMatchState();
+
+
+      if (typeof state.activeMode?.placePlayers === 'function') {
+        state.activeMode.placePlayers(Array.from(state.players.values()));
+      } else {
+        for (const p of state.players.values()) {
+          const spawn = spawnPlayerPosition();
+          if (spawn) { p.x = spawn.x; p.y = spawn.y; }
+        }
       }
 
       io.emit(SOCKET_EVENTS.GAME_STARTED, {
@@ -209,10 +229,6 @@ export function registerSocketHandlers() {
       });
 
       // Start the game mode simulation, healing items, and AI commentator.
-      if (state.activeMode) state.activeMode.stop();
-      state.activeMode = createMode(state.selectedMode, state.currentMap);
-
-      startMatchState();
       state.activeMode?.start();
 
       if (state.heartField) state.heartField.stop();
