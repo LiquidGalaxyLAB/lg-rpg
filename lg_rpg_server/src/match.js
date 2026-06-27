@@ -21,8 +21,8 @@ export function startMatchState() {
   }
 }
 
-// Ends the match, stops active game elements, and sends results to players.
-export function endMatch(reason = 'all-dead') {
+// Ends the match, stops active game elements, and sends results; result is null for co-op, set for PvP team modes.
+export function endMatch(reason = 'all-dead', result = null) {
   const outcome = reason === 'timer-win' ? 'win' : 'loss';
   state.matchActive = false;
   cancelEmptyGrace();
@@ -36,17 +36,21 @@ export function endMatch(reason = 'all-dead') {
   }
   state.phase = GAME_PHASES.LOBBY;
   const results = Array.from(state.players.values())
-    .map((p) => ({ playerId: p.playerId, name: p.name, kills: p.kills || 0 }))
+    .map((p) => ({ playerId: p.playerId, name: p.name, kills: p.kills || 0, team: p.team || null }))
     .sort((a, b) => b.kills - a.kills);
   const survivedMs = Date.now() - state.matchStartedAt;
-  emitGameEvent(outcome === 'win' ? 'match_won' : 'match_lost', { survivedMs, results });
+  const cheerEvent = result ? 'match_won' : outcome === 'win' ? 'match_won' : 'match_lost';
+  emitGameEvent(cheerEvent, { survivedMs, results });
   const finishingCheer = state.cheerleader;
   state.cheerleader = null;
   if (finishingCheer) {
     finishingCheer.finale().finally(() => finishingCheer.stop());
   }
-  io.emit(SOCKET_EVENTS.GAME_OVER, { reason, outcome, survivedMs, results });
-  console.log(`[game] match over (${reason}, ${outcome}). survived ${survivedMs}ms`);
+  const payload = result
+    ? { reason, winner: result.winner, scores: result.scores, survivedMs, results }
+    : { reason, outcome, survivedMs, results };
+  io.emit(SOCKET_EVENTS.GAME_OVER, payload);
+  console.log(`[game] match over (${reason}). ${result ? `winner=${result.winner}` : outcome}, survived ${survivedMs}ms`);
 }
 
 // Starts a countdown to end the match when the last player leaves.
