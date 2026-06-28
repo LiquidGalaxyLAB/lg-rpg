@@ -67,10 +67,14 @@ export function findSpawnPoint(zones, occupied = [], opts = {}) {
     distanceFalloff = 0,
   } = opts;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const zone = pickZoneWeighted(zones, targets, distanceFalloff);
-    const point = randomPointInRect(zone, edgePadding);
-    if (isClear(point, occupied, minSpacing) && isValidPoint(point)) return point;
+  // Relax spacing across passes so a too-tight zone can't strand players.
+  for (let spacing = minSpacing; ; spacing = Math.floor(spacing / 2)) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const zone = pickZoneWeighted(zones, targets, distanceFalloff);
+      const point = randomPointInRect(zone, edgePadding);
+      if (isClear(point, occupied, spacing) && isValidPoint(point)) return point;
+    }
+    if (spacing === 0) break;
   }
   return null;
 }

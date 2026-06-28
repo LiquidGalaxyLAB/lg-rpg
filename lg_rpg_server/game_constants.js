@@ -86,7 +86,7 @@ export const PVP = Object.freeze({
 export const PVP_TEAMS = Object.freeze(['teamA', 'teamB']);
 
 export const SPAWN = Object.freeze({
-  edgePadding: 28, minPlayerSpacing: 140, minEnemySpacing: 40, maxAttempts: 16,
+  edgePadding: 28, minPlayerSpacing: 35, minEnemySpacing: 35, maxAttempts: 16,
   enemyDistanceFalloff: 300,
 });
 
