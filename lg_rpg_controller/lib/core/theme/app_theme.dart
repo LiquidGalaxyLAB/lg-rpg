@@ -139,7 +139,8 @@ class AppTheme {
             BorderSide(color: AppColors.border),
           ),
           shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(_radius)),
+            RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(_radius)),
           ),
         ),
       ),
@@ -147,8 +148,8 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.onSurface,
         contentTextStyle: const TextStyle(color: AppColors.bg),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(_radius)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_radius)),
       ),
       progressIndicatorTheme:
           const ProgressIndicatorThemeData(color: AppColors.primary),
