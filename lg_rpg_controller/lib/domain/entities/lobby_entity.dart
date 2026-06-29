@@ -14,7 +14,7 @@ class LobbyEntity extends Equatable {
     required this.pvpTeams,
   });
 
-  bool isHost(String playerId) => playerId == hostId;
+  bool isHost(String playerId) => playerId.isNotEmpty && playerId == hostId;
 
   LobbyEntity copyWith(
       {List<PlayerEntity>? players,
