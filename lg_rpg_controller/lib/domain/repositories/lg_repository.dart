@@ -13,7 +13,7 @@ abstract class LGRepository {
 
   Future<void> storeSettings(
       String ip, String username, String password, int port,
-      {int screenNumber = 3});
+      {int? screenNumber});
   Future<ConnectionEntity?> getSettings();
   Future<void> setScreenNumber(int screens);
 

@@ -56,14 +56,14 @@ class LgRepositoryImpl implements LGRepository {
   @override
   Future<void> storeSettings(
       String ip, String username, String password, int port,
-      {int screenNumber = 3}) async {
-    _screenNumber = screenNumber;
+      {int? screenNumber}) async {
+    _screenNumber = screenNumber ?? _screenNumber;
     await _storageDataSource.saveSettings(ConnectionEntity(
       ip: ip,
       username: username,
       password: password,
       port: port,
-      screenNumber: screenNumber,
+      screenNumber: _screenNumber,
     ));
   }
 
@@ -76,30 +76,39 @@ class LgRepositoryImpl implements LGRepository {
   Future<void> startServer() async {
     // Open the firewall first so the controller can actually reach the server.
     await _openFirewallPort(GameServerConfig.port);
-    await _execute(
-        'cd ~/lg-rpg-server/scripts && chmod +x start-server.sh && nohup bash -l ./start-server.sh $screenNumber > launch.log 2>&1 &');
 
-    await _waitForServerHealthy();
-    log.i('LG server started and reachable on port ${GameServerConfig.port}');
+    // Run the script in the foreground (no `nohup … &`) so its
+    // stop/restart-on-mismatch logic finishes before we verify. The script
+    // launches `node` in the background itself and returns once it is healthy.
+    await _execute(
+        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x start-server.sh && '
+        'bash -l ./start-server.sh $screenNumber > ../logs/launch.log 2>&1');
+
+    await _waitForServerConfigured(screenNumber);
+    log.i('LG server started with $screenNumber screen(s) on port '
+        '${GameServerConfig.port}');
   }
 
-  Future<void> _waitForServerHealthy({
-    int attempts = 10,
+  /// Polls `/api/config` until the running server reports [expectedScreens].
+  Future<void> _waitForServerConfigured(
+    int expectedScreens, {
+    int attempts = 20,
     Duration interval = const Duration(seconds: 1),
   }) async {
-    final url = 'http://localhost:${GameServerConfig.port}/api/health';
+    final url = 'http://localhost:${GameServerConfig.port}/api/config';
     for (int i = 0; i < attempts; i++) {
-      final code = await _execute(
-        'curl -s -o /dev/null -w "%{http_code}" --max-time 2 "$url" || true',
-      );
-      if (code != null && code.contains('200')) {
-        return;
+      final body = await _execute('curl -s --max-time 2 "$url" || true');
+      if (body != null) {
+        final match = RegExp(r'"totalScreens"\s*:\s*(\d+)').firstMatch(body);
+        if (match != null && int.tryParse(match.group(1)!) == expectedScreens) {
+          return;
+        }
       }
       await Future.delayed(interval);
     }
     throw Exception(
-      'Server did not respond on port ${GameServerConfig.port} after '
-      '$attempts attempts. Check launch.log on the LG.',
+      'Server did not come up with $expectedScreens screen(s) on port '
+      '${GameServerConfig.port}. Check logs/launch.log on the LG.',
     );
   }
 
@@ -115,20 +124,20 @@ class LgRepositoryImpl implements LGRepository {
   @override
   Future<void> stopServer() async {
     await _execute(
-        'cd ~/lg-rpg-server/scripts && chmod +x stop-server.sh && nohup bash -l ./stop-server.sh $screenNumber > stop.log 2>&1 &');
+        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x stop-server.sh && nohup bash -l ./stop-server.sh $screenNumber > ../logs/stop.log 2>&1 &');
   }
 
   @override
   Future<void> launchBrowser() async {
     await _execute(
-        'cd ~/lg-rpg-server/scripts && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber > launch.log 2>&1 &');
+        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber > ../logs/launch.log 2>&1 &');
     log.i('LG browsers launch command sent');
   }
 
   @override
   Future<void> closeBrowser() async {
     await _execute(
-        'cd ~/lg-rpg-server/scripts && chmod +x close-browsers.sh && nohup bash -l ./close-browsers.sh $screenNumber > stop.log 2>&1 &');
+        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x close-browsers.sh && nohup bash -l ./close-browsers.sh $screenNumber > ../logs/stop.log 2>&1 &');
   }
 
   @override
