@@ -19,7 +19,8 @@ read_running_screens() {
 
 start_server() {
   echo "Starting LG RPG server | Root: $PROJECT_ROOT | Port: $PORT | Screens: $TOTAL_SCREENS"
-  TOTAL_SCREENS="$TOTAL_SCREENS" PORT="$PORT" node server.js > server.log 2>&1 &
+  # Output is captured in-app to logs/server.log (see src/lib/file-logger.js).
+  TOTAL_SCREENS="$TOTAL_SCREENS" PORT="$PORT" node server.js > /dev/null 2>&1 &
   echo "PID: $!"
 }
 
@@ -60,7 +61,7 @@ for i in $(seq 1 45); do
     break
   fi
   if [ "$i" -eq 45 ]; then
-    echo "Error: server failed to start. Check server.log"
+    echo "Error: server failed to start. Check logs/server.log"
     exit 1
   fi
   sleep 1

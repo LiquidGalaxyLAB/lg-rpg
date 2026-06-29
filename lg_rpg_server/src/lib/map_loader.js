@@ -176,5 +176,8 @@ export function loadMap(publicDir, mapConfig) {
 
   const collision = buildCollision(tmjPath, tmj);
 
+  const zoneCounts = Object.entries(zones).map(([name, rects]) => `${name}=${rects.length}`).join(' ');
+  console.log(`[map] loaded ${mapConfig.path} | ${bounds.width}x${bounds.height}px | zones: ${zoneCounts} | blocked tiles: ${collision.blockedCount}`);
+
   return { bounds, zones, collision };
 }
