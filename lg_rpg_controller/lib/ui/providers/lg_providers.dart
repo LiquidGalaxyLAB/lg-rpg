@@ -5,6 +5,9 @@ import 'package:lg_rpg_controller/domain/usecases/system_control.dart';
 
 export '../../core/di/injection_container.dart' show lgRepositoryProvider;
 
+final serverRunningProvider = StateProvider<bool>((ref) => false);
+final browserOpenProvider = StateProvider<bool>((ref) => false);
+
 final connectToLgUseCaseProvider = Provider<ConnectToLgUseCase>((ref) {
   final repository = ref.watch(lgRepositoryProvider);
   return ConnectToLgUseCase(repository);

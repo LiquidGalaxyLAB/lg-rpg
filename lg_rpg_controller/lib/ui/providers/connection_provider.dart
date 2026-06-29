@@ -84,7 +84,8 @@ class ConnectionNotifier extends StateNotifier<ConnectionEntity> {
       await _connectToLg.call(
           state.ip, state.username, state.password, state.port);
       await _repository.storeSettings(
-          state.ip, state.username, state.password, state.port);
+          state.ip, state.username, state.password, state.port,
+          screenNumber: state.screenNumber);
 
       state = state.copyWith(isConnected: true);
     } catch (e) {
