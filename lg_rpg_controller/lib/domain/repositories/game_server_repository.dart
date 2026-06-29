@@ -17,6 +17,10 @@ abstract class GameServerRepository {
 
   Stream<void> get playerDiedStream;
 
+  Stream<void> get playerRespawnedStream;
+
+  Stream<String> get lobbyErrorStream;
+
   bool get isGameConnected;
 
   String get playerToken;

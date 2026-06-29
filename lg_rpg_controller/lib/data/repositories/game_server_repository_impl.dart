@@ -27,6 +27,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
   bool _wantsLobby = false;
   String _lobbyName = 'Player';
 
+  String? _myTeam;
+
   final _serverStatusController =
       StreamController<GameServerEntity>.broadcast();
   final _lobbyController = StreamController<LobbyEntity?>.broadcast();
@@ -35,6 +37,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
   final _gameStateController = StreamController<GameStateEntity>.broadcast();
   final _gameOverController = StreamController<GameOverEntity>.broadcast();
   final _playerDiedController = StreamController<void>.broadcast();
+  final _playerRespawnedController = StreamController<void>.broadcast();
+  final _lobbyErrorController = StreamController<String>.broadcast();
 
   GameServerRepositoryImpl(this._localStorage, this._socketService) {
     _setupConnectionListener();
@@ -103,7 +107,9 @@ class GameServerRepositoryImpl extends GameServerRepository {
       );
     });
     _socketService.on(SocketEvent.lobbyError, (data) {
-      log.e('Lobby error from server: ${data['message']}');
+      final message = (data is Map ? data['message'] : data)?.toString() ?? '';
+      log.e('Lobby error from server: $message');
+      if (message.isNotEmpty) _lobbyErrorController.add(message);
     });
     _socketService.on(SocketEvent.gameStarted, (data) {
       log.i('Game started from server: $data');
@@ -129,6 +135,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
       }
       if (mine == null) return;
       final match = data['match'];
+      _myTeam = mine['team']?.toString();
       _gameStateController.add(GameStateEntity(
         hp: (mine['hp'] as num?)?.round() ?? 0,
         maxHp: (mine['maxHp'] as num?)?.round() ?? 0,
@@ -136,19 +143,33 @@ class GameServerRepositoryImpl extends GameServerRepository {
             match is Map ? ((match['elapsedMs'] as num?)?.round() ?? 0) : 0,
         durationMs:
             match is Map ? ((match['durationMs'] as num?)?.round() ?? 0) : 0,
+        team: _myTeam,
       ));
     });
     _socketService.on(SocketEvent.gameOver, (data) {
       log.i('Game over from server: $data');
       final payload = data is Map ? data : const {};
+      // PvP rounds report a winning team; resolve this player's outcome from the
+      // team we were on. Co-op modes send an explicit per-player outcome.
+      String outcome;
+      if (payload.containsKey('winner')) {
+        final winner = payload['winner']?.toString();
+        outcome = (winner != null && winner == _myTeam) ? 'win' : 'loss';
+      } else {
+        outcome = payload['outcome']?.toString() ?? 'loss';
+      }
       _gameOverController.add(GameOverEntity(
-        outcome: payload['outcome']?.toString() ?? 'loss',
+        outcome: outcome,
         survivedMs: (payload['survivedMs'] as num?)?.round() ?? 0,
       ));
     });
     _socketService.on(SocketEvent.youDied, (data) {
       log.i('This player died: $data');
       _playerDiedController.add(null);
+    });
+    _socketService.on(SocketEvent.youRespawned, (data) {
+      log.i('This player respawned: $data');
+      _playerRespawnedController.add(null);
     });
   }
 
@@ -167,6 +188,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
     _socketService.off(SocketEvent.gameState);
     _socketService.off(SocketEvent.gameOver);
     _socketService.off(SocketEvent.youDied);
+    _socketService.off(SocketEvent.youRespawned);
   }
 
   @override
@@ -188,6 +210,12 @@ class GameServerRepositoryImpl extends GameServerRepository {
 
   @override
   Stream<void> get playerDiedStream => _playerDiedController.stream;
+
+  @override
+  Stream<void> get playerRespawnedStream => _playerRespawnedController.stream;
+
+  @override
+  Stream<String> get lobbyErrorStream => _lobbyErrorController.stream;
 
   @override
   bool get isGameConnected => _isConnected;
@@ -224,6 +252,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
     try {
       _serverUrl = serverUrl;
 
+      // Confirm the server is actually up before opening the socket, so we can
+      // surface a clear "server unreachable" error instead of a socket timeout.
       await _preflightHealthCheck(_serverUrl);
       await _socketService.connect(_serverUrl);
     } catch (e) {
