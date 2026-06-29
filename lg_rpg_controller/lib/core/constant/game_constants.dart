@@ -2,7 +2,7 @@ abstract final class GameMode {
   static const pvp = 'pvp';
   static const zombie = 'zombie';
 
-  static const defaultMode = pvp;
+  static const defaultMode = zombie;
   static const values = {pvp, zombie};
 }
 
