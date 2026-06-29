@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/ui/pages/main_screen.dart';
+import 'package:lg_rpg_controller/ui/theme/app_theme.dart';
 
 void main() async {
   runApp(
@@ -16,6 +17,8 @@ class LgRPG extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
       home: const MainScreen(),
     );
   }
