@@ -27,6 +27,7 @@ export function drainGameEvents() {
 // Logs spoken commentator lines to a file.
 const SPOKEN_LOG_PATH = path.join(rootDir, 'logs', 'cheerleader_spoken.log');
 fs.mkdirSync(path.dirname(SPOKEN_LOG_PATH), { recursive: true });
+fs.writeFileSync(SPOKEN_LOG_PATH, ''); // reset transcript on each server start
 
 export function logSpoken(text) {
   fs.appendFile(SPOKEN_LOG_PATH, text, (err) => {

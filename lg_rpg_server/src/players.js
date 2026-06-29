@@ -9,12 +9,16 @@ export function spawnPlayerPosition() {
   if (!state.currentMap) return null;
   const zones = state.currentMap.zones.playerSpawn || [];
   const occupied = Array.from(state.players.values()).map((p) => ({ x: p.x, y: p.y }));
-  return findSpawnPoint(zones, occupied, {
+  const point = findSpawnPoint(zones, occupied, {
     edgePadding: SPAWN.edgePadding,
     minSpacing: SPAWN.minPlayerSpacing,
     maxAttempts: SPAWN.maxAttempts * 4,
     isValidPoint: (point) => canStandAt(state.currentMap.collision, point.x, point.y),
   });
+  if (!point) {
+    console.warn(`[spawn] no valid player spawn (${zones.length} zone(s), ${occupied.length} placed) — player left at default position`);
+  }
+  return point;
 }
 
 // Computes the bounding box of a player based on their size constants.

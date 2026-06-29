@@ -28,8 +28,14 @@ async function generateText(key, prompt) {
       let raw = '';
       res.on('data', (chunk) => raw += chunk);
       res.on('end', () => {
+        if (res.statusCode !== 200) {
+          const hint = res.statusCode === 429 ? ' (quota/rate limit)' : res.statusCode === 400 || res.statusCode === 403 ? ' (invalid API key)' : '';
+          console.warn(`[cheerleader] Gemini HTTP ${res.statusCode}${hint}: ${raw.slice(0, 200)}`);
+          resolve('');
+          return;
+        }
         try {
-          const json = res.statusCode === 200 ? JSON.parse(raw) : null;
+          const json = JSON.parse(raw);
           resolve((json?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim());
         } catch { resolve(''); }
       });
