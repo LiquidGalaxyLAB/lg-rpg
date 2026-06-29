@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
+import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 
 class ControllerPage extends ConsumerStatefulWidget {
   const ControllerPage({super.key});
@@ -33,46 +34,58 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            // Left: movement joystick.
-            Expanded(
-              child: Center(
-                child: Joystick(
-                  listener: (details) {
-                    ref
-                        .read(movePlayerUseCaseProvider)
-                        .call(details.x, details.y);
-                  },
-                ),
-              ),
-            ),
-            // Right: attack button (server cooldown-gates rapid taps).
-            Expanded(
-              child: Center(
-                child: GestureDetector(
-                  onTap: () => ref.read(attackPlayerUseCaseProvider).call(),
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppGradients.heroGlow),
+        child: SafeArea(
+          child: Row(
+            children: [
+              // Left: movement joystick on a subtle base ring.
+              Expanded(
+                child: Center(
                   child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: const BoxDecoration(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFFD32F2F),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black45,
-                            blurRadius: 8,
-                            offset: Offset(0, 4)),
-                      ],
+                      color: AppColors.surface.withValues(alpha: 0.5),
+                      border: Border.all(color: AppColors.border),
                     ),
-                    child: const Icon(Icons.gps_fixed,
-                        color: Colors.white, size: 48),
+                    child: Joystick(
+                      listener: (details) {
+                        ref
+                            .read(movePlayerUseCaseProvider)
+                            .call(details.x, details.y);
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+              // Right: attack button (server cooldown-gates rapid taps).
+              Expanded(
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () => ref.read(attackPlayerUseCaseProvider).call(),
+                    child: Container(
+                      width: 128,
+                      height: 128,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: AppGradients.accent,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.gps_fixed,
+                          color: Colors.white, size: 52),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
