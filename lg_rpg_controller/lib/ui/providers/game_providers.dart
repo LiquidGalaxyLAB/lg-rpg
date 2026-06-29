@@ -3,6 +3,7 @@ import 'package:lg_rpg_controller/core/di/injection_container.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_state_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_over_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/usecases/game_server_control.dart';
 export '../../core/di/injection_container.dart'
@@ -57,6 +58,13 @@ final lobbyStreamProvider = StreamProvider<LobbyEntity?>((ref) {
   return repository.lobbyStream;
 });
 
+/// Live game-server socket status, used to tell "not connected" apart from
+/// "connected but lobby still loading".
+final gameServerStatusProvider = StreamProvider<GameServerEntity>((ref) {
+  final repository = ref.watch(gameServerRepositoryProvider);
+  return repository.serverStatusStream;
+});
+
 final gameStartedStreamProvider = StreamProvider<GameStartedEntity>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);
   return repository.gameStartedStream;
@@ -77,4 +85,14 @@ final lastGameResultProvider = StateProvider<GameOverEntity?>((ref) => null);
 final playerDiedStreamProvider = StreamProvider<void>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);
   return repository.playerDiedStream;
+});
+
+final playerRespawnedStreamProvider = StreamProvider<void>((ref) {
+  final repository = ref.watch(gameServerRepositoryProvider);
+  return repository.playerRespawnedStream;
+});
+
+final lobbyErrorStreamProvider = StreamProvider<String>((ref) {
+  final repository = ref.watch(gameServerRepositoryProvider);
+  return repository.lobbyErrorStream;
 });

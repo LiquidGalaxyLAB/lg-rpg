@@ -1,56 +1,32 @@
-import 'dart:math';
-import 'package:circular_menu/circular_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/ui/pages/controller_page.dart';
 import 'package:lg_rpg_controller/ui/pages/home_page.dart';
-import 'package:lg_rpg_controller/ui/pages/inventory_page.dart';
 import 'package:lg_rpg_controller/ui/pages/match_waiting_page.dart';
 import 'package:lg_rpg_controller/ui/pages/match_result_page.dart';
-import 'package:lg_rpg_controller/ui/pages/lg_task.dart';
-import 'package:lg_rpg_controller/ui/pages/quest_page.dart';
 import 'package:lg_rpg_controller/ui/pages/settings_page.dart';
-import 'package:lg_rpg_controller/ui/pages/wheel_page.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
 import '../providers/navigation_provider.dart';
 
-class MainScreen extends ConsumerStatefulWidget {
+class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
 
-  @override
-  ConsumerState<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends ConsumerState<MainScreen> {
-  final GlobalKey<CircularMenuState> _menuKey = GlobalKey();
-
+  // Indexed by NavigationIndex. Each page owns its own Scaffold/AppBar, so the
+  // shell just swaps the body. Navigation between hub pages is driven by the
+  // AppBar settings cog (Home -> Settings) and back arrow; the immersive game
+  // pages are reached automatically by the listeners below.
   static const List<Widget> _pages = [
     HomePage(),
-    LgTask(),
-    WheelPage(),
-    QuestPage(),
     SettingsPage(),
     ControllerPage(),
-    InventoryPage(),
     MatchWaitingPage(),
     MatchResultPage(),
   ];
 
-  static const List<String> _pageTitles = [
-    'Home',
-    'LgTask',
-    'Wheel',
-    'Quest',
-    'Settings',
-    'Controller',
-    'Inventory',
-    'Match',
-    'Result',
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selectedIndex = ref.watch(navigationProvider);
+
     // Match starts: jump to the controls.
     ref.listen(gameStartedStreamProvider, (_, next) {
       next.whenData((_) {
@@ -68,6 +44,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       });
     });
 
+    // PvP respawn: bring the player back to the controls after the down timer.
+    ref.listen(playerRespawnedStreamProvider, (_, next) {
+      next.whenData((_) {
+        ref
+            .read(navigationProvider.notifier)
+            .setIndex(NavigationIndex.controller);
+      });
+    });
+
     ref.listen(gameOverStreamProvider, (_, next) {
       next.whenData((result) {
         ref.read(lastGameResultProvider.notifier).state = result;
@@ -77,99 +62,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       });
     });
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: selectedIndex != 0
-          ? AppBar(
-              title: Text(_pageTitles[selectedIndex]),
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-            )
-          : null,
-      body: CircularMenu(
-        key: _menuKey,
-        alignment: Alignment.centerRight, // good for landscape
-        radius: 110,
-        startingAngleInRadian: 0.5 * pi,
-        endingAngleInRadian: 1.5 * pi,
-        toggleButtonAnimatedIconData: AnimatedIcons.menu_close,
-        toggleButtonColor: Colors.blueGrey,
-        toggleButtonIconColor: Colors.white,
-        backgroundWidget: _pages[selectedIndex],
-        items: [
-          CircularMenuItem(
-            icon: Icons.home,
-            color: const Color.fromARGB(255, 239, 24, 24),
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.home);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.assignment,
-            color: Colors.teal,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.lgTask);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.circle,
-            color: Colors.purple,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.wheel);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.map,
-            color: Colors.orange,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.quest);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.settings,
-            color: Colors.grey,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.settings);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.sports_esports,
-            color: Colors.indigo,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.controller);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-          CircularMenuItem(
-            icon: Icons.inventory,
-            color: Colors.green,
-            onTap: () {
-              ref
-                  .read(navigationProvider.notifier)
-                  .setIndex(NavigationIndex.inventory);
-              _menuKey.currentState?.reverseAnimation();
-            },
-          ),
-        ],
-      ),
-    );
+    return _pages[selectedIndex];
   }
 }
