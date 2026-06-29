@@ -2,7 +2,7 @@
 
 // Gemini AI model version used for text generation.
 export const MODELS = Object.freeze({
-  text: 'gemini-2.5-flash',
+  text: 'gemini-3-flash-preview',
 });
 
 // AWS Polly voice mappings for the two AI commentators.
@@ -16,10 +16,10 @@ function rosterLines(players) {
   if (!players.length) return '  No players listed';
   return players
     .map((p) => {
-      const hp = Number.isFinite(Number(p.hp)) ? Number(p.hp) : 0;
-      const maxHp = Number.isFinite(Number(p.maxHp)) ? Number(p.maxHp) : 100;
+      const health = Number.isFinite(Number(p.health)) ? Number(p.health) : 0;
+      const maxhealth = Number.isFinite(Number(p.maxhealth)) ? Number(p.maxhealth) : 100;
       const team = p.team ? `, team ${p.team === 'teamA' ? 'Blue' : 'Red'}` : '';
-      return `  ${p.name}: HP ${hp}/${maxHp}, kills ${p.kills || 0}${team}, status: ${p.status || 'unknown'}`;
+      return `  ${p.name}: health ${health}/${maxhealth}, kills ${p.kills || 0}${team}, status: ${p.status || 'unknown'}`;
     })
     .join('\n');
 }
@@ -60,7 +60,7 @@ export function buildSummary(ctx = {}) {
 // Mode-specific ground rules so the AI never describes the wrong game.
 const ZOMBIE_FACTS =
   `- Mode: Zombie Mode — a co-op survival fight. After a 30-second warm-up, the squad must survive 3 minutes of combat.
-- Win = the survive timer reaches 0 with at least one player alive. Loss = every player hits 0 HP first.
+- Win = the survive timer reaches 0 with at least one player alive. Loss = every player hits 0 health first.
 - Enemies spawn continuously (starts up to 25 on the map, cap rises ~11 each minute). Kill one and another spawns — the horde never clears.
 - 1 to 4 players, all on the same side.`;
 
@@ -71,7 +71,7 @@ const PVP_FACTS =
 - Reference teams as Blue and Red.`;
 
 const SHARED_FACTS =
-  `- Player names, HP, kills, scores, time, and enemy counts come ONLY from the MATCH STATE below. Never invent or change a name or number.
+  `- Player names, health, kills, scores, time, and enemy counts come ONLY from the MATCH STATE below. Never invent or change a name or number.
 - Only reference players listed in MATCH STATE; never imply extra players or a higher count than listed.`;
 
 // Builds the full GAME FACTS block for the active mode.
@@ -83,7 +83,7 @@ function gameFacts(modeId) {
 const STYLE =
   `Curly and Julie are live commentators in an arena game booth.
 Curly: hype and emotional — reacts to momentum, stays hopeful or worried based on what's real.
-Julie: dry analyst — always replies DIRECTLY to what Curly just said, works the real numbers (HP, time, score, enemy pressure) into natural speech.
+Julie: dry analyst — always replies DIRECTLY to what Curly just said, works the real numbers (health, time, score, enemy pressure) into natural speech.
 Rules: warm, witty, never mean. Max 12 words per line. No filler openers (Oh / Wow / Well / Ah).`;
 
 // Generates the AI prompt for the match starting announcement.
@@ -111,7 +111,7 @@ export function banterPrompt(summary, transcript, modeId = 'zombie') {
     `MATCH STATE:\n${summary}\n\n` +
     `Write the NEXT exchange:\n` +
     `- Curly reacts to the current mood — hopeful or worried — based on the real state.\n` +
-    `- Julie replies DIRECTLY to Curly: pick up her exact point and agree, tease, or counter. Address her by name sometimes. Vary her angle each turn — rotate between HP, the clock, a specific player, kills, score, zone control, or enemy pressure as the mode allows. Never open with a number readout.\n` +
+    `- Julie replies DIRECTLY to Curly: pick up her exact point and agree, tease, or counter. Address her by name sometimes. Vary her angle each turn — rotate between health, the clock, a specific player, kills, score, zone control, or enemy pressure as the mode allows. Never open with a number readout.\n` +
     `- Neither host calls an easy win unless the state genuinely supports it.\n\n` +
     `Output ONLY this format:\nCurly: <line>\nJulie: <line>`
   );
