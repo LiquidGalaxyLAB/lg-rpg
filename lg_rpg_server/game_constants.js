@@ -38,7 +38,7 @@ export const GAME_MODE_LABELS = Object.freeze({
   [GAME_MODES.ZOMBIE]: 'Zombie Mode',
 });
 
-export const DEFAULT_GAME_MODE = GAME_MODES.PVP;
+export const DEFAULT_GAME_MODE = GAME_MODES.ZOMBIE;
 
 export const VALID_GAME_MODES = Object.freeze(new Set(Object.values(GAME_MODES)));
 

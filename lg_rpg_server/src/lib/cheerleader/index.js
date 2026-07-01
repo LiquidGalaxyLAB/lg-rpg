@@ -95,7 +95,7 @@ async function generateAudio(text, voiceId) {
 const EVENT_MAPPERS = {
   match_start: () => 'the match kicked off',
   kill: (d) => `${d.name} got a kill (${d.kills} total)`,
-  player_low_health: (d) => `${d.name} is low on health (${d.hp} HP)`,
+  player_low_health: (d) => `${d.name} is low on health (${d.hp} left)`,
   player_died: (d) => `${d.name} went down`,
   match_won: () => 'the squad survived and won the match',
   match_lost: () => 'the squad was wiped out',
