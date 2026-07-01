@@ -5,10 +5,10 @@ export const MODELS = Object.freeze({
   text: 'gemini-3-flash-preview',
 });
 
-// AWS Polly voice mappings for the two AI commentators.
+// Microsoft Edge TTS voice names for the two AI commentators .
 export const VOICES = Object.freeze({
-  Curly: 'Joanna',
-  Julie: 'Kendra',
+  Curly: 'en-US-AriaNeural',
+  Julie: 'en-US-JennyNeural',
 });
 
 // Formats the per-player roster line shared by both modes.

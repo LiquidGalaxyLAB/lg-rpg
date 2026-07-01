@@ -12,6 +12,7 @@
     "easystarjs": "^0.4.4",
     "express": "^4.19.2",
     "lowdb": "^6.1.1",
+    "msedge-tts": "^2.0.6",
     "phaser": "^4.1.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3"

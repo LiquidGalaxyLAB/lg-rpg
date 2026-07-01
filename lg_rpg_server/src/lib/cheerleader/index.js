@@ -1,6 +1,10 @@
-// Coordinates the AI cheerleader commentator using Gemini for text generation and AWS Polly for text-to-speech.
+// Coordinates the AI cheerleader commentator using Gemini for text generation and Microsoft Edge TTS for the voice.
 import https from 'https';
-import crypto from 'crypto';
+import { webcrypto } from 'crypto';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+
+// Node 16 has no global `crypto`; msedge-tts 2.x uses the Web Crypto API (crypto.subtle / getRandomValues) as a global.
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import { CHEERLEADER } from '../../../game_constants.js';
 import { MODELS, VOICES, buildSummary, banterPrompt, introPrompt } from './personas.js';
 
@@ -46,57 +50,44 @@ async function generateText(key, prompt) {
   });
 }
 
-const AWS_REGION = (process.env.AWS_REGION || 'ap-south-1').trim();
-const POLLY_HOST = `polly.${AWS_REGION}.amazonaws.com`;
-const POLLY_SERVICE = 'polly';
-const sha256hex = (data) => crypto.createHash('sha256').update(data).digest('hex');
-const hmac = (key, data) => crypto.createHmac('sha256', key).update(data).digest();
+// MP3 output so the right screen can play the clip as a data URI; timeout guards a stuck connection.
+const EDGE_FORMAT = OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3;
+const EDGE_TIMEOUT_MS = 15000;
 
-// Converts dialogue text into speech audio using AWS Polly API.
+// Escapes model text so it can't break the SSML document Edge TTS builds around it.
+const escapeXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Converts dialogue text into speech audio (base64 MP3) using Microsoft Edge TTS service.
 async function generateAudio(text, voiceId) {
-  const accessKey = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
-  if (!accessKey || !secretKey) {
-    console.warn('[cheerleader] AWS credentials missing — line goes unvoiced');
+  let tts;
+  try {
+    tts = new MsEdgeTTS();
+    await tts.setMetadata(voiceId, EDGE_FORMAT);
+  } catch (err) {
+    console.warn('[cheerleader] Edge TTS connect failed:', err?.message || err);
     return '';
   }
-  const body = JSON.stringify({ Text: text, OutputFormat: 'mp3', VoiceId: voiceId, Engine: 'neural' });
-  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
-  const dateStamp = amzDate.slice(0, 8);
-  const uri = '/v1/speech';
-  const payloadHash = sha256hex(body);
-  const signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
-  const canonicalHeaders = `content-type:application/json\nhost:${POLLY_HOST}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
-  const canonicalRequest = ['POST', uri, '', canonicalHeaders, signedHeaders, payloadHash].join('\n');
-  const scope = `${dateStamp}/${AWS_REGION}/${POLLY_SERVICE}/aws4_request`;
-  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256hex(canonicalRequest)].join('\n');
-  const signingKey = hmac(hmac(hmac(hmac('AWS4' + secretKey, dateStamp), AWS_REGION), POLLY_SERVICE), 'aws4_request');
-  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
-  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
   return new Promise((resolve) => {
-    const req = https.request({
-      hostname: POLLY_HOST, path: uri, method: 'POST',
-      headers: {
-        'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
-        'X-Amz-Date': amzDate, 'X-Amz-Content-Sha256': payloadHash, Authorization: authorization
-      }
-    }, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        const buf = Buffer.concat(chunks);
-        if (res.statusCode !== 200) {
-          console.warn(`[cheerleader] Polly HTTP ${res.statusCode}: ${buf.toString('utf8').slice(0, 200)}`);
-          resolve('');
-          return;
-        }
-        resolve(buf.toString('base64'));
-      });
-    });
-    req.on('error', (err) => { console.warn('[cheerleader] Polly request failed:', err?.message || err); resolve(''); });
-    req.write(body);
-    req.end();
+    const chunks = [];
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { tts.close(); } catch { }
+      resolve(val);
+    };
+    const timer = setTimeout(() => { console.warn('[cheerleader] Edge TTS timed out'); finish(''); }, EDGE_TIMEOUT_MS);
+    const collect = () => finish(chunks.length ? Buffer.concat(chunks).toString('base64') : '');
+
+    Promise.resolve(tts.toStream(escapeXml(text)))
+      .then(({ audioStream }) => {
+        audioStream.on('data', (chunk) => chunks.push(chunk));
+        audioStream.on('end', collect);
+        audioStream.on('close', collect);
+        audioStream.on('error', (err) => { console.warn('[cheerleader] Edge TTS stream error:', err?.message || err); finish(''); });
+      })
+      .catch((err) => { console.warn('[cheerleader] Edge TTS request failed:', err?.message || err); finish(''); });
   });
 }
 
@@ -133,7 +124,7 @@ export function createCheerleader({ drain, play, getMatchContext }) {
 
   // Chains commentary actions to run sequentially and avoid overlapping voice clips.
   const enqueueCommentary = (label, task) =>
-    commentaryChain = commentaryChain.catch(() => {}).then(task).catch((err) => console.warn(`[cheerleader] ${label} failed:`, err?.message || err));
+    commentaryChain = commentaryChain.catch(() => { }).then(task).catch((err) => console.warn(`[cheerleader] ${label} failed:`, err?.message || err));
 
   const queueTick = () => {
     if (tickQueued) return commentaryChain;
