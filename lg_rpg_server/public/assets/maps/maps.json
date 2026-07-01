@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "defaultMode": "pvp",
+  "defaultMode": "zombie",
   "modes": {
     "pvp": {
       "id": "pvp",

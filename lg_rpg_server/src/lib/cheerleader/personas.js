@@ -16,8 +16,8 @@ function rosterLines(players) {
   if (!players.length) return '  No players listed';
   return players
     .map((p) => {
-      const health = Number.isFinite(Number(p.health)) ? Number(p.health) : 0;
-      const maxhealth = Number.isFinite(Number(p.maxhealth)) ? Number(p.maxhealth) : 100;
+      const health = Number.isFinite(Number(p.hp)) ? Number(p.hp) : 0;
+      const maxhealth = Number.isFinite(Number(p.maxHp)) ? Number(p.maxHp) : 100;
       const team = p.team ? `, team ${p.team === 'teamA' ? 'Blue' : 'Red'}` : '';
       return `  ${p.name}: health ${health}/${maxhealth}, kills ${p.kills || 0}${team}, status: ${p.status || 'unknown'}`;
     })
