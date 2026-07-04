@@ -79,3 +79,9 @@ class SelectGameModeUseCase {
   SelectGameModeUseCase(this.repository);
   Future<void> call(String mode) => repository.selectGameMode(mode);
 }
+
+class SelectTeamUseCase {
+  final GameServerRepository repository;
+  SelectTeamUseCase(this.repository);
+  Future<void> call(String team) => repository.selectTeam(team);
+}

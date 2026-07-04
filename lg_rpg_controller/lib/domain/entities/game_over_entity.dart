@@ -1,7 +1,6 @@
-/// The match result delivered to THIS player when the game ends, so the
-/// controller can show a clear win/lose moment before returning Home.
+/// The match result delivered to this player, so the controller can show a win/lose moment before returning Home.
 class GameOverEntity {
-  /// 'win' or 'loss' from the server's perspective for this player.
+  /// 'win', 'loss', or 'draw' (tied PvP round) for this player.
   final String outcome;
   final int survivedMs;
 
@@ -11,4 +10,5 @@ class GameOverEntity {
   });
 
   bool get isWin => outcome == 'win';
+  bool get isDraw => outcome == 'draw';
 }
