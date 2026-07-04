@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/player_entity.dart';
 import 'package:lg_rpg_controller/core/theme/app_theme.dart';
@@ -7,11 +8,13 @@ import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 class LobbyPlayersSection extends StatelessWidget {
   final AsyncValue<LobbyEntity?> lobbyAsync;
   final bool serverConnected;
+  final bool showTeams;
 
   const LobbyPlayersSection({
     super.key,
     required this.lobbyAsync,
     this.serverConnected = false,
+    this.showTeams = false,
   });
 
   @override
@@ -34,15 +37,16 @@ class LobbyPlayersSection extends StatelessWidget {
         message: 'Could not load lobby',
         detail: error.toString(),
       ),
-      data: (lobby) => _LobbyPlayersList(lobby: lobby),
+      data: (lobby) => _LobbyPlayersList(lobby: lobby, showTeams: showTeams),
     );
   }
 }
 
 class _LobbyPlayersList extends StatelessWidget {
   final LobbyEntity? lobby;
+  final bool showTeams;
 
-  const _LobbyPlayersList({required this.lobby});
+  const _LobbyPlayersList({required this.lobby, this.showTeams = false});
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +69,7 @@ class _LobbyPlayersList extends StatelessWidget {
           key: ValueKey(player.id),
           player: player,
           isHost: lobby?.isHost(player.id) ?? false,
+          showTeam: showTeams,
         );
       },
     );
@@ -74,16 +79,17 @@ class _LobbyPlayersList extends StatelessWidget {
 class _PlayerLobbyTile extends StatelessWidget {
   final PlayerEntity player;
   final bool isHost;
+  final bool showTeam;
 
   const _PlayerLobbyTile({
     super.key,
     required this.player,
     required this.isHost,
+    this.showTeam = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final ready = player.isReady;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -138,11 +144,8 @@ class _PlayerLobbyTile extends StatelessWidget {
               ],
             ),
           ),
-          Icon(
-            ready ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
-            color: ready ? AppColors.success : AppColors.warning,
-            size: 22,
-          ),
+          // No ready icon: the server has no ready-up mechanic, so showing one would lie.
+          if (showTeam) _TeamBadge(team: player.team),
         ],
       ),
     );
@@ -151,6 +154,38 @@ class _PlayerLobbyTile extends StatelessWidget {
   String get _initial {
     final trimmedName = player.name.trim();
     return trimmedName.isEmpty ? '?' : trimmedName[0].toUpperCase();
+  }
+}
+
+class _TeamBadge extends StatelessWidget {
+  final String? team;
+
+  const _TeamBadge({required this.team});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = team == PvpTeam.teamA
+        ? Colors.blueAccent
+        : team == PvpTeam.teamB
+            ? Colors.redAccent
+            : AppColors.onSurfaceMuted;
+    final label = team == null ? 'Auto' : PvpTeam.label(team!);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 
