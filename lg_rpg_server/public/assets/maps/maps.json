@@ -10,17 +10,39 @@
           "key": "map:pvp:3",
           "path": "maps/pvp/pvp_map_3_screen.tmj",
           "layers": {
-            "ground": "Tile Layer 1"
+            "ground": "base_layer",
+            "walk": "walk_layer"
           },
           "objectLayers": {
+            "teamASpawn": "team1_spwan",
+            "teamBSpawn": "team2_spawn",
             "playerSpawn": "player_spawn",
             "captureZone": "capture_zone"
           },
           "tilesets": [
             {
               "name": "TilesetFloor",
-              "key": "tileset:floor",
-              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png"
+              "key": "tileset:pvp3:1:TilesetFloor",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "firstgid": 1
+            },
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:pvp3:573:TilesetFloor",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "firstgid": 573
+            },
+            {
+              "name": "tileset_arranged",
+              "key": "tileset:pvp3:1145:tileset_arranged",
+              "path": "maps/shared_assets/pvp/robot_warfare/tileset_arranged.png",
+              "firstgid": 1145
+            },
+            {
+              "name": "Building",
+              "key": "tileset:pvp3:1401:Building",
+              "path": "maps/shared_assets/pvp/metro_city/Building.png",
+              "firstgid": 1401
             }
           ]
         },
@@ -28,17 +50,25 @@
           "key": "map:pvp:5",
           "path": "maps/pvp/pvp_map_5_screen.tmj",
           "layers": {
-            "ground": "Tile Layer 1"
+            "ground": "base_layer"
           },
           "objectLayers": {
-            "playerSpawn": "player_spawn",
+            "teamASpawn": "team1_spwan",
+            "teamBSpawn": "team2_spwan",
             "captureZone": "capture_zone"
           },
           "tilesets": [
             {
               "name": "TilesetFloor",
-              "key": "tileset:floor",
-              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png"
+              "key": "tileset:pvp5:1:TilesetFloor",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "firstgid": 1
+            },
+            {
+              "name": "TilesetFloor",
+              "key": "tileset:pvp5:573:TilesetFloor",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "firstgid": 573
             }
           ]
         }
