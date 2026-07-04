@@ -66,6 +66,9 @@ body {
 .topbar.lose::before { background: var(--red); }
 .topbar.lose .timer-value { color: var(--red); text-shadow: 0 0 20px rgba(255, 23, 68, 0.3); }
 .topbar.lose .timer-label { color: var(--red); }
+.topbar.draw::before { background: var(--muted); }
+.topbar.draw .timer-value { color: var(--muted); text-shadow: none; }
+.topbar.draw .timer-label { color: var(--muted); }
 
 /* Board */
 .board { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -99,6 +102,16 @@ body {
 .row.lead .rank { border-color: rgba(255, 202, 40, 0.5); background: rgba(255, 202, 40, 0.1); color: var(--gold); }
 .player-main { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .name { font-size: 26px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* PvP team tags */
+.team-tag {
+  display: inline-block; font-family: var(--font-hud); font-size: 12px; font-weight: 700; letter-spacing: 1px;
+  padding: 3px 9px; border-radius: 4px; margin-right: 10px; vertical-align: middle;
+}
+.team-tag.team-a { background: rgba(41, 121, 255, 0.15); color: var(--blue); border: 1px solid rgba(41, 121, 255, 0.4); }
+.team-tag.team-b { background: rgba(255, 23, 68, 0.15); color: var(--red); border: 1px solid rgba(255, 23, 68, 0.4); }
+.row.team-a { border-left: 3px solid rgba(41, 121, 255, 0.45); }
+.row.team-b { border-left: 3px solid rgba(255, 23, 68, 0.45); }
 .hp-track { height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.06); margin-top: 10px; overflow: hidden; }
 .hp-fill { height: 100%; width: var(--hp); background: linear-gradient(90deg, #00e676, #69f0ae); transition: width 0.4s ease; }
 .pstate { font-family: var(--font-hud); font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; color: var(--green); }
@@ -123,16 +136,6 @@ body {
 .row.empty-slot .name, .row.empty-slot .pstate { color: var(--muted); font-style: italic; }
 .row.empty-slot .kills b { color: var(--muted); }
 .row.final .hp-track, .row.final .pstate { display: none; }
-
-/* Announcement Banner */
-.banner {
-  position: fixed; top: -100px; left: 50%; z-index: 100; transform: translateX(-50%); width: calc(100% - 80px); max-width: 600px;
-  padding: 18px 30px; border: 1px solid var(--gold); border-radius: 12px; background: rgba(8, 11, 17, 0.95);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 20px rgba(255,202,40,0.2); color: var(--gold);
-  font-family: var(--font-hud); font-size: 20px; font-weight: 700; text-align: center;
-  opacity: 0; pointer-events: none; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.banner.show { top: 40px; opacity: 1; }
 
 /* Keyframes */
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
