@@ -5,6 +5,7 @@ export const SOCKET_EVENTS = Object.freeze({
   UPDATE_LOBBY: 'updateLobby',
   LOBBY_ERROR: 'lobbyError',
   SELECT_GAME_MODE: 'selectGameMode',
+  SELECT_TEAM: 'selectTeam',
   START_GAME: 'startGame',
   GAME_STARTED: 'gameStarted',
   END_GAME: 'endGame',

@@ -72,15 +72,15 @@ export const MATCH = Object.freeze({
   winDurationMs: 180000,
 });
 
-// Zone Capture (PvP) timings. A round = lockMs (confined in spawn) + roundDurationMs.
+// Zone Capture (PvP) timings. Teams spawn apart, so the round starts live immediately.
 export const PVP = Object.freeze({
   // Two teams need at least one player each, so a PvP match can't start solo.
   minPlayers: 2,
-  lockMs: 4000,
-  graceMs: 3000,
   roundDurationMs: 120000,
   respawnDelayMs: 4000,
   invulnMs: 2000,
+  // Holding the circle alone for this many seconds earns one point.
+  secondsPerPoint: 6,
 });
 
 export const PVP_TEAMS = Object.freeze(['teamA', 'teamB']);

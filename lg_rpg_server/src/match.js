@@ -40,7 +40,12 @@ export function endMatch(reason = 'all-dead', result = null) {
     .sort((a, b) => b.kills - a.kills);
   const survivedMs = Date.now() - state.matchStartedAt;
   const cheerEvent = result ? 'match_won' : outcome === 'win' ? 'match_won' : 'match_lost';
-  emitGameEvent(cheerEvent, { survivedMs, results });
+  // PvP results carry the winner and score so the commentator announces them correctly.
+  emitGameEvent(cheerEvent, {
+    survivedMs,
+    results,
+    ...(result ? { winner: result.winner, scores: result.scores } : {}),
+  });
   const finishingCheer = state.cheerleader;
   state.cheerleader = null;
   if (finishingCheer) {

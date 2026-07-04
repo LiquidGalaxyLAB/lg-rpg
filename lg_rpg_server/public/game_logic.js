@@ -114,8 +114,6 @@ async function startGame() {
           this.hideWaiting();
         });
 
-        socket.on(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, d => this.showAnnouncement(d));
-
         this.phase = configData.phase || GAME_PHASES.LOBBY;
         if (this.phase !== GAME_PHASES.PLAYING) this.showWaiting();
 
@@ -152,7 +150,7 @@ async function startGame() {
         this.drawPvp();
       }
 
-      // Renders the PvP capture zone, spawn box, and team markers under each player.
+      // Renders the PvP capture zones, team spawn boxes, and team markers under each player.
       drawPvp() {
         const g = this.pvpGraphics.clear();
         const pvp = this.serverPvp;
@@ -160,14 +158,21 @@ async function startGame() {
         const off = this.cameraOffset, W = GAME_VIEW.screenWidth;
         const teamColor = (t) => (t === 'teamA' ? 0x1f6feb : t === 'teamB' ? 0xda3633 : 0xffffff);
 
-        if (pvp.zone) {
-          const z = pvp.zone, c = teamColor(z.currentTeam);
-          g.fillStyle(c, 0.18).fillRect(z.x - off, z.y, z.width, z.height);
-          g.lineStyle(3, c, 0.9).strokeRect(z.x - off, z.y, z.width, z.height);
+        for (const z of pvp.zones || []) {
+          const c = teamColor(z.currentTeam);
+          if (z.ellipse) {
+            const cx = z.x + z.width / 2 - off, cy = z.y + z.height / 2;
+            g.fillStyle(c, 0.18).fillEllipse(cx, cy, z.width, z.height);
+            g.lineStyle(3, c, 0.9).strokeEllipse(cx, cy, z.width, z.height);
+          } else {
+            g.fillStyle(c, 0.18).fillRect(z.x - off, z.y, z.width, z.height);
+            g.lineStyle(3, c, 0.9).strokeRect(z.x - off, z.y, z.width, z.height);
+          }
         }
-        if (pvp.spawnBox && pvp.phase === 'lock') {
-          const b = pvp.spawnBox;
-          g.lineStyle(2, 0xffd166, 0.85).strokeRect(b.x - off, b.y, b.width, b.height);
+        for (const team of ['teamA', 'teamB']) {
+          const b = pvp.spawns?.[team];
+          if (!b) continue;
+          g.lineStyle(2, teamColor(team), 0.85).strokeRect(b.x - off, b.y, b.width, b.height);
         }
         for (const p of this.serverPlayers) {
           if (!p.team) continue;
@@ -334,22 +339,6 @@ async function startGame() {
       hideWaiting() {
         (this.waitingObjects || []).forEach(obj => obj.destroy());
         this.waitingObjects = [];
-      }
-
-      // Displays match announcements or warnings.
-      showAnnouncement(data) {
-        const w = GAME_VIEW.screenWidth, y = 140;
-        (this.announceObjects || []).forEach(obj => obj.destroy());
-        this.announceObjects = [
-          this.add.rectangle(w / 2, y, w * 0.9, 100, 0x000000, 0.7).setDepth(10500),
-          this.add.text(w / 2, y, data?.message || '', {
-            fontFamily: 'monospace', fontSize: '34px', color: '#ffdd55', align: 'center', wordWrap: { width: w * 0.85 }
-          }).setOrigin(0.5).setDepth(10501)
-        ];
-        this.time.delayedCall(data?.durationMs || 4000, () => {
-          (this.announceObjects || []).forEach(obj => obj.destroy());
-          this.announceObjects = [];
-        });
       }
     }
 
