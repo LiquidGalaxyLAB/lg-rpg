@@ -28,9 +28,7 @@ class LgRepositoryImpl implements LGRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // CONNECTION MANAGEMENT
-  // ─────────────────────────────────────────────────────────────
+  // ── CONNECTION MANAGEMENT ──
 
   @override
   bool get isConnected => _sshService.isConnected;
@@ -49,9 +47,7 @@ class LgRepositoryImpl implements LGRepository {
     await _sshService.disconnect();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SETTINGS PERSISTENCE
-  // ─────────────────────────────────────────────────────────────
+  // ── SETTINGS PERSISTENCE ──
 
   @override
   Future<void> storeSettings(
@@ -77,9 +73,7 @@ class LgRepositoryImpl implements LGRepository {
     // Open the firewall first so the controller can actually reach the server.
     await _openFirewallPort(GameServerConfig.port);
 
-    // Run the script in the foreground (no `nohup … &`) so its
-    // stop/restart-on-mismatch logic finishes before we verify. The script
-    // launches `node` in the background itself and returns once it is healthy.
+    // Run the script in the foreground so its stop/restart logic finishes before we verify; it backgrounds node itself.
     await _execute(
         'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x start-server.sh && '
         'bash -l ./start-server.sh $screenNumber > ../logs/launch.log 2>&1');
@@ -150,9 +144,7 @@ class LgRepositoryImpl implements LGRepository {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HELPER METHODS (DRY)
-  // ─────────────────────────────────────────────────────────────
+  // ── HELPER METHODS ──
 
   /// Execute command with error handling. Returns the command's stdout.
   Future<String?> _execute(String cmd) async {
@@ -187,9 +179,7 @@ class LgRepositoryImpl implements LGRepository {
   </Document>
 </kml>''';
 
-  // ─────────────────────────────────────────────────────────────
-  // NAVIGATION COMMANDS
-  // ─────────────────────────────────────────────────────────────
+  // ── NAVIGATION COMMANDS ──
 
   @override
   Future<void> flyTo(FlyToEntity command) async {
@@ -210,9 +200,7 @@ class LgRepositoryImpl implements LGRepository {
     await _execute('echo "$query" > /tmp/query.txt');
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // KML OPERATIONS
-  // ─────────────────────────────────────────────────────────────
+  // ── KML OPERATIONS ──
 
   @override
   Future<void> uploadKml(String content, String fileName) async {
@@ -257,9 +245,7 @@ class LgRepositoryImpl implements LGRepository {
     await _execute('echo "" > /tmp/query.txt');
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // VISUAL ELEMENTS (LOGO, OVERLAYS, TOURS)
-  // ─────────────────────────────────────────────────────────────
+  // ── VISUAL ELEMENTS (LOGO, OVERLAYS, TOURS) ──
 
   @override
   Future<void> sendLogo({String assetPath = 'image/logo.png'}) async {
@@ -278,8 +264,9 @@ class LgRepositoryImpl implements LGRepository {
     <name>Logo</name>
     <Icon><href>http://lg1:81/lg_logo.png</href></Icon>
     <overlayXY x="0" y="1" xunits="fraction" yunits="fraction"/>
-    <screenXY x="0.02" y="0.95" xunits="fraction" yunits="fraction"/>
-    <size x="0.2" y="0" xunits="fraction" yunits="fraction"/>
+    <screenXY x="0" y="0.98" xunits="fraction" yunits="fraction"/>
+    <rotationXY x="0" y="0" xunits="fraction" yunits="fraction"/>
+    <size x="500" y="300" xunits="pixels" yunits="pixels"/>
   </ScreenOverlay>
 </kml>''';
 
@@ -324,8 +311,7 @@ class LgRepositoryImpl implements LGRepository {
 
   @override
   Future<void> orbit(OrbitEntity orbitParams) async {
-    // Generate KML Tour for orbit animation
-    // Each step rotates heading by a small increment
+    // Build a KML tour that rotates the heading by a small increment each step.
     final int steps =
         orbitParams.duration * 2; // 2 steps per second for smoothness
     final double headingIncrement = 360.0 / steps;
@@ -368,9 +354,7 @@ $tourSteps
     await uploadKml(orbitKml, 'orbit_tour.kml');
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SYSTEM CONTROLS
-  // ─────────────────────────────────────────────────────────────
+  // ── SYSTEM CONTROLS ──
 
   @override
   Future<bool> rebootAll() async {
