@@ -97,7 +97,12 @@ const EVENT_MAPPERS = {
   kill: (d) => `${d.name} got a kill (${d.kills} total)`,
   player_low_health: (d) => `${d.name} is low on health (${d.hp} left)`,
   player_died: (d) => `${d.name} went down`,
-  match_won: () => 'the squad survived and won the match',
+  match_won: (d) => {
+    if (!d.scores) return 'the squad survived and won the match';
+    const score = `Blue ${d.scores.teamA ?? 0} - Red ${d.scores.teamB ?? 0}`;
+    if (!d.winner) return `the round ended in a draw, ${score}`;
+    return `${d.winner === 'teamA' ? 'Blue' : 'Red'} team won the round, ${score}`;
+  },
   match_lost: () => 'the squad was wiped out',
 };
 
@@ -153,13 +158,16 @@ export function createCheerleader({ drain, play, getMatchContext }) {
     const text = await generateText(key, prompt);
     if (!running) return;
     const banter = parseBanter(text);
-    if (banter.length >= 2) {
-      for (const { who, line } of banter) {
-        if (!running) return;
-        const speaker = who === 'julie' ? 'Julie' : 'Curly';
-        remember(`${speaker}: ${line}`);
-        await speak(line, speaker);
-      }
+    // Speak whatever parsed; dropping short output silently left the commentator dead for a whole tick.
+    if (!banter.length) {
+      if (text.trim()) console.warn('[cheerleader] unparseable model output, skipping this beat:', text.slice(0, 120));
+      return;
+    }
+    for (const { who, line } of banter) {
+      if (!running) return;
+      const speaker = who === 'julie' ? 'Julie' : 'Curly';
+      remember(`${speaker}: ${line}`);
+      await speak(line, speaker);
     }
   };
 
