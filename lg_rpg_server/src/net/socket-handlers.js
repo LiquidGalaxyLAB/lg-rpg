@@ -3,6 +3,7 @@ import {
   GAME_PHASES,
   PLAYER_DEFAULTS,
   PVP,
+  PVP_TEAMS,
   SERVER_CONFIG,
   SOCKET_EVENTS,
   VALID_GAME_MODES,
@@ -13,7 +14,7 @@ import { state } from '../state.js';
 import { getSelectedMapConfig } from '../maps.js';
 import { createMode } from '../game-modes.js';
 import { broadcastLobby, playerHitbox, spawnPlayerPosition } from '../players.js';
-import { cancelEmptyGrace, removePlayer, startMatchState } from '../match.js';
+import { cancelEmptyGrace, endMatch, removePlayer, startMatchState } from '../match.js';
 import {
   drainGameEvents,
   emitCheerleaderAudio,
@@ -87,6 +88,7 @@ export function registerSocketHandlers() {
         actionExpiresAt: existing?.actionExpiresAt ?? 0,
         kills: existing?.kills ?? 0,
         lastAttackAt: existing?.lastAttackAt ?? 0,
+        team: existing?.team ?? null,
       };
 
       // Clean up the old socket mapping if the player rejoins on a new socket.
@@ -169,6 +171,32 @@ export function registerSocketHandlers() {
       broadcastLobby();
     });
 
+    // Lets a player pick their PvP team from the lobby.
+    socket.on(SOCKET_EVENTS.SELECT_TEAM, (payload = {}) => {
+      const playerId = state.socketPlayers.get(socket.id);
+      const player = state.players.get(playerId);
+
+      if (!player) {
+        socket.emit(SOCKET_EVENTS.LOBBY_ERROR, { message: 'Join the lobby before selecting a team.' });
+        return;
+      }
+
+      if (state.phase === GAME_PHASES.PLAYING) {
+        socket.emit(SOCKET_EVENTS.LOBBY_ERROR, { message: 'Cannot change teams during a match.' });
+        return;
+      }
+
+      const team = String(payload.team || '').trim();
+      if (!PVP_TEAMS.includes(team)) {
+        socket.emit(SOCKET_EVENTS.LOBBY_ERROR, { message: 'Invalid team.' });
+        return;
+      }
+
+      player.team = team;
+      console.log(`[lobby] team selected: ${team} by ${player.name} (${player.playerId})`);
+      broadcastLobby();
+    });
+
     // Initializes the map, spawn locations, and simulations to start the match.
     socket.on(SOCKET_EVENTS.START_GAME, () => {
       const playerId = state.socketPlayers.get(socket.id);
@@ -190,12 +218,27 @@ export function registerSocketHandlers() {
         return;
       }
 
-      // PvP is team-vs-team, so it needs at least two players to start.
-      if (state.selectedMode === GAME_MODES.PVP && state.players.size < PVP.minPlayers) {
-        socket.emit(SOCKET_EVENTS.LOBBY_ERROR, {
-          message: `PvP needs at least ${PVP.minPlayers} players. Wait for another player to join.`,
-        });
-        return;
+      // PvP is team-vs-team, so both teams must end up with at least one player.
+      if (state.selectedMode === GAME_MODES.PVP) {
+        if (state.players.size < PVP.minPlayers) {
+          socket.emit(SOCKET_EVENTS.LOBBY_ERROR, {
+            message: `PvP needs at least ${PVP.minPlayers} players. Wait for another player to join.`,
+          });
+          return;
+        }
+        // Unassigned players get auto-balanced, so only an all-on-one-team lobby is invalid.
+        const counts = { teamA: 0, teamB: 0 };
+        let unassigned = 0;
+        for (const p of state.players.values()) {
+          if (PVP_TEAMS.includes(p.team)) counts[p.team] += 1;
+          else unassigned += 1;
+        }
+        if (unassigned === 0 && (counts.teamA === 0 || counts.teamB === 0)) {
+          socket.emit(SOCKET_EVENTS.LOBBY_ERROR, {
+            message: 'Both teams need at least one player. Move someone to the other team.',
+          });
+          return;
+        }
       }
 
       console.log(`[game] started in ${state.selectedMode} mode by ${player.name} (${player.playerId})`);
@@ -253,7 +296,13 @@ export function registerSocketHandlers() {
 
       removePlayer(playerId, socket.id);
       console.log(`[lobby] player left: ${playerId}. total=${state.players.size}`);
-      broadcastLobby();
+
+      // Voluntary leave: if that was the last player, end the match now instead of waiting out the disconnect grace window.
+      if (state.players.size === 0 && state.phase === GAME_PHASES.PLAYING) {
+        endMatch('all-left');
+      } else {
+        broadcastLobby();
+      }
     });
 
     // Clean up player state and notify other clients on disconnect.
