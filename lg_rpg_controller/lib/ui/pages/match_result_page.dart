@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
 
@@ -42,6 +43,23 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
   Widget build(BuildContext context) {
     final result = ref.watch(lastGameResultProvider);
     final won = result?.isWin ?? false;
+    // A tied PvP round arrives as a 'draw' outcome (server sends winner: null).
+    final draw = result?.isDraw ?? false;
+    // PvP outcome is a team win/loss, not personal survival, so skip the "You Died"/"Survived Xs" framing.
+    final isPvp = ref.watch(currentMatchModeProvider) == GameMode.pvp;
+    final title = draw
+        ? 'Draw'
+        : won
+            ? (isPvp ? 'Victory!' : 'You Survived!')
+            : (isPvp ? 'Defeat' : 'You Died');
+    final subtitle = isPvp
+        ? 'Round Over'
+        : 'Survived ${_formatClock(result?.survivedMs ?? 0)}';
+    final color = draw
+        ? const Color(0xFFFFC94D)
+        : won
+            ? const Color(0xFF4DD964)
+            : const Color(0xFFFF5555);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -49,23 +67,26 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                won ? Icons.emoji_events : Icons.sentiment_very_dissatisfied,
+                draw
+                    ? Icons.handshake_rounded
+                    : won
+                        ? Icons.emoji_events
+                        : Icons.sentiment_very_dissatisfied,
                 size: 72,
-                color: won ? const Color(0xFF4DD964) : const Color(0xFFFF5555),
+                color: color,
               ),
               const SizedBox(height: 24),
               Text(
-                won ? 'You Survived!' : 'You Died',
+                title,
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color:
-                      won ? const Color(0xFF4DD964) : const Color(0xFFFF5555),
+                  color: color,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                'Survived ${_formatClock(result?.survivedMs ?? 0)}',
+                subtitle,
                 style: const TextStyle(fontSize: 16, color: Colors.white70),
               ),
             ],
