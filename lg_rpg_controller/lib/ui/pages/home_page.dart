@@ -4,6 +4,7 @@ import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/di/injection_container.dart';
 import 'package:lg_rpg_controller/ui/providers/connection_provider.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
+import 'package:lg_rpg_controller/ui/providers/lg_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
 import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 import 'package:lg_rpg_controller/ui/widgets/lobby_players_section.dart';
@@ -20,6 +21,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   final _nameController = TextEditingController(text: 'Player');
   bool _isConnecting = false;
   bool _isStartingGame = false;
+  bool _isDisconnecting = false;
 
   @override
   void initState() {
@@ -64,6 +66,20 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
+  Future<void> _disconnectServer() async {
+    setState(() => _isDisconnecting = true);
+    try {
+      await ref.read(disconnectFromGameServerUseCaseProvider).call();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to disconnect: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isDisconnecting = false);
+    }
+  }
+
   Future<void> _startGame() async {
     setState(() => _isStartingGame = true);
     try {
@@ -91,7 +107,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     final serverConnected =
         ref.watch(gameServerStatusProvider).value?.isConnected ?? false;
     final lgConnected = ref.watch(connectionProvider).isConnected;
+    final serverRunning = ref.watch(serverRunningProvider);
     final gameServerRepository = ref.watch(gameServerRepositoryProvider);
+    // Whether we've actually joined the lobby, not just connected the socket.
+    final inLobby = lobby != null;
     final selectedGameMode = GameMode.values.contains(lobby?.selectedMode)
         ? lobby!.selectedMode
         : GameMode.defaultMode;
@@ -108,16 +127,36 @@ class _HomePageState extends ConsumerState<HomePage> {
       });
     });
 
-    // PvP is team-vs-team, so the host can't start it solo.
-    final needsMorePlayers =
-        selectedGameMode == GameMode.pvp && playerCount < 2;
-    final canStart = isHost && !_isStartingGame && !needsMorePlayers;
+    // PvP needs at least 2 players and one on each team (unassigned players get auto-balanced).
+    final isPvp = selectedGameMode == GameMode.pvp;
+    final myTeam = lobby?.pvpTeams[gameServerRepository.playerToken];
+    final teams = lobby?.pvpTeams ?? const <String, String>{};
+    final needsMorePlayers = isPvp && playerCount < 2;
+    final teamsUnbalanced = isPvp &&
+        playerCount >= 2 &&
+        teams.length == playerCount &&
+        teams.values.toSet().length < 2;
+    final canStart =
+        isHost && !_isStartingGame && !needsMorePlayers && !teamsUnbalanced;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('LG RPG'),
         actions: [
+          // Only a disconnect action: Connect always does a full reconnect+rejoin, so a separate "leave lobby" buys nothing.
+          if (serverConnected)
+            IconButton(
+              tooltip: 'Disconnect from Game Server',
+              icon: _isDisconnecting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    )
+                  : const Icon(Icons.link_off_rounded, color: AppColors.danger),
+              onPressed: _isDisconnecting ? null : _disconnectServer,
+            ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings_outlined),
@@ -131,49 +170,71 @@ class _HomePageState extends ConsumerState<HomePage> {
         decoration: const BoxDecoration(gradient: AppGradients.heroGlow),
         child: SafeArea(
           top: false,
-          child: Padding(
+          // One plain scrolling Column: a fill-remaining-space sliver silently collapsed the lobby list and Play Game to zero height when the content above filled the viewport.
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                StatusPill(
-                  active: lgConnected,
-                  label: lgConnected
-                      ? 'Connected to Liquid Galaxy'
-                      : 'Not connected · Tap to open Settings',
-                  onTap: lgConnected
-                      ? null
-                      : () => ref
-                          .read(navigationProvider.notifier)
-                          .setIndex(NavigationIndex.settings),
+                Row(
+                  children: [
+                    Expanded(
+                      child: StatusPill(
+                        active: lgConnected,
+                        label: lgConnected ? 'Liquid Galaxy' : 'LG rig',
+                        onTap: lgConnected
+                            ? null
+                            : () => ref
+                                .read(navigationProvider.notifier)
+                                .setIndex(NavigationIndex.settings),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: StatusPill(
+                        active: inLobby,
+                        label: inLobby ? 'Game Server' : 'Not in lobby',
+                        activeIcon: Icons.dns_rounded,
+                        inactiveIcon: Icons.dns_outlined,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _nameController,
+                  enabled: !inLobby,
                   textInputAction: TextInputAction.done,
                   decoration: const InputDecoration(
                     labelText: 'Player Name',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 AppButton(
-                  label: _isConnecting ? 'Connecting…' : 'Connect to Server',
-                  icon: Icons.wifi_tethering_rounded,
+                  label: inLobby
+                      ? 'Connected'
+                      : (_isConnecting ? 'Connecting…' : 'Connect to Server'),
+                  icon: inLobby
+                      ? Icons.check_rounded
+                      : Icons.wifi_tethering_rounded,
                   loading: _isConnecting,
-                  onPressed:
-                      (lgConnected && !_isConnecting) ? _connectToServer : null,
+                  onPressed: (lgConnected &&
+                          serverRunning &&
+                          !_isConnecting &&
+                          !inLobby)
+                      ? _connectToServer
+                      : null,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 const SectionLabel('Game Mode'),
                 const SizedBox(height: 10),
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(
                       value: GameMode.pvp,
-                      label: Text('${GameModeLabel.pvp} (Soon)'),
+                      label: Text(GameModeLabel.pvp),
                       icon: Icon(Icons.sports_martial_arts),
-                      enabled: false,
                     ),
                     ButtonSegment(
                       value: GameMode.zombie,
@@ -193,15 +254,54 @@ class _HomePageState extends ConsumerState<HomePage> {
                       : null,
                   showSelectedIcon: false,
                 ),
-                const SizedBox(height: 24),
+                if (!isHost) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Only the host can change the mode',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                  ),
+                ],
+                if (isPvp && serverConnected) ...[
+                  const SizedBox(height: 16),
+                  const SectionLabel('Your Team'),
+                  const SizedBox(height: 10),
+                  SegmentedButton<String>(
+                    emptySelectionAllowed: true,
+                    segments: const [
+                      ButtonSegment(
+                        value: PvpTeam.teamA,
+                        label: Text('Blue Team'),
+                        icon: Icon(Icons.shield_outlined),
+                      ),
+                      ButtonSegment(
+                        value: PvpTeam.teamB,
+                        label: Text('Red Team'),
+                        icon: Icon(Icons.local_fire_department_outlined),
+                      ),
+                    ],
+                    selected: {if (myTeam != null) myTeam},
+                    onSelectionChanged: (values) {
+                      if (values.isNotEmpty) {
+                        ref.read(selectTeamUseCaseProvider).call(values.first);
+                      }
+                    },
+                    showSelectedIcon: false,
+                  ),
+                ],
+                const SizedBox(height: 20),
                 SectionLabel('Lobby · $playerCount'),
                 const SizedBox(height: 10),
-                Expanded(
+                SizedBox(
+                  height: 240,
                   child: GlassCard(
                     padding: const EdgeInsets.all(12),
                     child: LobbyPlayersSection(
                       lobbyAsync: lobbyAsync,
                       serverConnected: serverConnected,
+                      showTeams: isPvp,
                     ),
                   ),
                 ),
@@ -209,9 +309,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                 AppButton(
                   label: _isStartingGame
                       ? 'Starting…'
-                      : needsMorePlayers
-                          ? 'PvP needs 2+ players'
-                          : 'Play Game',
+                      : !isHost
+                          ? 'Waiting for host to start…'
+                          : needsMorePlayers
+                              ? 'PvP needs 2+ players'
+                              : teamsUnbalanced
+                                  ? 'Teams need 1 player each'
+                                  : 'Play Game',
                   icon: Icons.play_arrow_rounded,
                   loading: _isStartingGame,
                   onPressed: canStart ? _startGame : null,
