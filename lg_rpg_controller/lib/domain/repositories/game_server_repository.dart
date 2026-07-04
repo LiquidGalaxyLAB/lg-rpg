@@ -46,4 +46,6 @@ abstract class GameServerRepository {
   Future<void> attackPlayer();
 
   Future<void> selectGameMode(String mode);
+
+  Future<void> selectTeam(String team);
 }

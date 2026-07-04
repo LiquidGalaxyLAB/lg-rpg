@@ -53,13 +53,16 @@ final selectGameModeUseCaseProvider = Provider<SelectGameModeUseCase>((ref) {
   return SelectGameModeUseCase(ref.watch(gameServerRepositoryProvider));
 });
 
+final selectTeamUseCaseProvider = Provider<SelectTeamUseCase>((ref) {
+  return SelectTeamUseCase(ref.watch(gameServerRepositoryProvider));
+});
+
 final lobbyStreamProvider = StreamProvider<LobbyEntity?>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);
   return repository.lobbyStream;
 });
 
-/// Live game-server socket status, used to tell "not connected" apart from
-/// "connected but lobby still loading".
+/// Live game-server socket status; tells "not connected" apart from "connected but lobby still loading".
 final gameServerStatusProvider = StreamProvider<GameServerEntity>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);
   return repository.serverStatusStream;
@@ -81,6 +84,9 @@ final gameOverStreamProvider = StreamProvider<GameOverEntity>((ref) {
 });
 
 final lastGameResultProvider = StateProvider<GameOverEntity?>((ref) => null);
+
+/// Mode of the current (or just-ended) match, set from GAME_STARTED; lets UI tell PvP respawn apart from Zombie permadeath.
+final currentMatchModeProvider = StateProvider<String?>((ref) => null);
 
 final playerDiedStreamProvider = StreamProvider<void>((ref) {
   final repository = ref.watch(gameServerRepositoryProvider);

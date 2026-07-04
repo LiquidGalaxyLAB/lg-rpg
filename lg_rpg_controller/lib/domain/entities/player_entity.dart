@@ -9,6 +9,7 @@ class PlayerEntity extends Equatable {
   final int kills;
   final int numQuests;
   final bool isReady;
+  final String? team;
 
   const PlayerEntity({
     required this.id,
@@ -19,6 +20,7 @@ class PlayerEntity extends Equatable {
     this.inventory = const {},
     this.kills = 0,
     this.isReady = false,
+    this.team,
   });
 
   PlayerEntity copyWith(
@@ -29,7 +31,8 @@ class PlayerEntity extends Equatable {
       Map<String, int>? inventory,
       int? kills,
       int? numQuests,
-      bool? isReady}) {
+      bool? isReady,
+      String? team}) {
     return PlayerEntity(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -38,10 +41,20 @@ class PlayerEntity extends Equatable {
         inventory: inventory ?? this.inventory,
         kills: kills ?? this.kills,
         numQuests: numQuests ?? this.numQuests,
-        isReady: isReady ?? this.isReady);
+        isReady: isReady ?? this.isReady,
+        team: team ?? this.team);
   }
 
   @override
-  List<Object?> get props =>
-      [coins, name, id, numQuests, currentHealth, inventory, kills, isReady];
+  List<Object?> get props => [
+        coins,
+        name,
+        id,
+        numQuests,
+        currentHealth,
+        inventory,
+        kills,
+        isReady,
+        team
+      ];
 }

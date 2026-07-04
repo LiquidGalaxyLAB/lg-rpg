@@ -11,6 +11,15 @@ abstract final class GameModeLabel {
   static const zombie = 'Zombie Mode';
 }
 
+abstract final class PvpTeam {
+  static const teamA = 'teamA';
+  static const teamB = 'teamB';
+
+  static const values = {teamA, teamB};
+
+  static String label(String team) => team == teamA ? 'Blue' : 'Red';
+}
+
 abstract final class GameServerConfig {
   static const port = 3000;
 
@@ -27,6 +36,7 @@ abstract final class SocketEvent {
   static const updateLobby = 'updateLobby';
   static const lobbyError = 'lobbyError';
   static const selectGameMode = 'selectGameMode';
+  static const selectTeam = 'selectTeam';
   static const startGame = 'startGame';
   static const gameStarted = 'gameStarted';
   static const endGame = 'endGame';

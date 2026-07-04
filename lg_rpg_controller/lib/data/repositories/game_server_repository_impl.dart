@@ -90,6 +90,17 @@ class GameServerRepositoryImpl extends GameServerRepository {
               .where((player) => player.id.isNotEmpty)
               .toList()
           : <PlayerEntity>[];
+
+      // Lobby updates go to every socket (even after leaving or a rejected join), so the only reliable membership check is whether the snapshot lists our own token.
+      final containsMe = playersList.any((player) => player.id == _playerToken);
+      if (!containsMe) {
+        if (_currentLobby != null) {
+          _currentLobby = null;
+          _lobbyController.add(null);
+        }
+        return;
+      }
+
       final hostId = data['hostId']?.toString();
       _currentLobby = LobbyEntity(
         players: playersList,
@@ -99,7 +110,10 @@ class GameServerRepositoryImpl extends GameServerRepository {
         selectedMode: data['selectedMode']?.toString() ??
             data['mode']?.toString() ??
             GameMode.defaultMode,
-        pvpTeams: const {},
+        pvpTeams: {
+          for (final player in playersList)
+            if (player.team != null) player.id: player.team!,
+        },
       );
       _lobbyController.add(_currentLobby);
       log.i(
@@ -149,12 +163,15 @@ class GameServerRepositoryImpl extends GameServerRepository {
     _socketService.on(SocketEvent.gameOver, (data) {
       log.i('Game over from server: $data');
       final payload = data is Map ? data : const {};
-      // PvP rounds report a winning team; resolve this player's outcome from the
-      // team we were on. Co-op modes send an explicit per-player outcome.
+      // PvP reports a winning team (null on a tie); co-op sends an explicit per-player outcome.
       String outcome;
       if (payload.containsKey('winner')) {
         final winner = payload['winner']?.toString();
-        outcome = (winner != null && winner == _myTeam) ? 'win' : 'loss';
+        outcome = winner == null
+            ? 'draw'
+            : winner == _myTeam
+                ? 'win'
+                : 'loss';
       } else {
         outcome = payload['outcome']?.toString() ?? 'loss';
       }
@@ -174,10 +191,12 @@ class GameServerRepositoryImpl extends GameServerRepository {
   }
 
   PlayerEntity _mapSocketPlayer(Map<dynamic, dynamic> player) {
+    final team = player['team']?.toString();
     return PlayerEntity(
       id: player['playerId']?.toString() ?? '',
       name: player['name']?.toString() ?? '',
       isReady: player['isReady'] == true,
+      team: PvpTeam.values.contains(team) ? team : null,
     );
   }
 
@@ -252,8 +271,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
     try {
       _serverUrl = serverUrl;
 
-      // Confirm the server is actually up before opening the socket, so we can
-      // surface a clear "server unreachable" error instead of a socket timeout.
+      // Health-check first so we surface a clear "server unreachable" error instead of a socket timeout.
       await _preflightHealthCheck(_serverUrl);
       await _socketService.connect(_serverUrl);
     } catch (e) {
@@ -403,6 +421,19 @@ class GameServerRepositoryImpl extends GameServerRepository {
       });
     } catch (e) {
       log.e('Failed to select game mode: $e');
+    }
+  }
+
+  @override
+  Future<void> selectTeam(String team) async {
+    try {
+      log.i('Selecting team: $team...');
+      _socketService.emit(SocketEvent.selectTeam, {
+        'playerId': _playerToken,
+        'team': team,
+      });
+    } catch (e) {
+      log.e('Failed to select team: $e');
     }
   }
 }
