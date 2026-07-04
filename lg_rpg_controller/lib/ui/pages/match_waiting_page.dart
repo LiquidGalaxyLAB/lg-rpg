@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/theme/app_theme.dart';
+import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
+import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
+import 'package:lg_rpg_controller/ui/widgets/app_widgets.dart';
 
-class MatchWaitingPage extends StatelessWidget {
+class MatchWaitingPage extends ConsumerWidget {
   const MatchWaitingPage({super.key});
 
+  Future<void> _leaveMatch(WidgetRef ref) async {
+    await ref.read(leaveLobbyUseCaseProvider).call();
+    ref.read(navigationProvider.notifier).setIndex(NavigationIndex.home);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.heroGlow),
@@ -41,6 +50,16 @@ class MatchWaitingPage extends StatelessWidget {
                   width: 26,
                   height: 26,
                   child: CircularProgressIndicator(strokeWidth: 2.6),
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: 200,
+                  child: AppButton(
+                    label: 'Leave Match',
+                    icon: Icons.exit_to_app_rounded,
+                    variant: AppButtonVariant.tonal,
+                    onPressed: () => _leaveMatch(ref),
+                  ),
                 ),
               ],
             ),
