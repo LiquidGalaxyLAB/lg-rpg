@@ -32,15 +32,13 @@ export function buildSummary(ctx = {}) {
   let stateLines;
   if (modeId === 'pvp') {
     const s = ctx.scores || {};
+    const held = ctx.zonesHeld || {};
     const phaseLine =
-      ctx.phase === 'active' ? `Round time left: ${ctx.timeRemaining}s`
-        : ctx.phase === 'lock' ? `Teams locked in spawn — fight starts in ${ctx.timeRemaining}s`
-          : ctx.phase === 'ended' ? 'Round over'
-            : 'Grace period — fight about to begin';
+      ctx.phase === 'ended' ? 'Round over' : `Round time left: ${ctx.timeRemaining}s`;
     stateLines =
       `${phaseLine}\n` +
       `Score — Blue ${s.teamA ?? 0} : Red ${s.teamB ?? 0}\n` +
-      `Zone held by: ${ctx.zoneTeam === 'teamA' ? 'Blue' : ctx.zoneTeam === 'teamB' ? 'Red' : 'no one'}`;
+      `Circle held by: ${held.teamA ? 'Blue' : held.teamB ? 'Red' : 'no one'}`;
   } else {
     const phaseLine =
       ctx.phase === 'grace'
@@ -65,9 +63,9 @@ const ZOMBIE_FACTS =
 - 1 to 4 players, all on the same side.`;
 
 const PVP_FACTS =
-  `- Mode: PvP Zone Capture — two teams, Blue and Red, fight over a single zone.
-- Players start locked in a shared spawn, get a short grace period, then fight. Holding the zone alone scores for your team over time.
-- Downed players respawn after a few seconds. Win = the higher team score when the round timer ends; equal scores = a draw.
+  `- Mode: PvP Zone Capture — two teams, Blue and Red, fight over one capture circle (a different spot each match).
+- Each team spawns on its own side and races to the circle. A team earns 1 point for every 6 seconds only it is standing in the circle.
+- Downed players respawn at their own side after a few seconds. Win = the higher team score when the round timer ends; equal scores = a draw.
 - Reference teams as Blue and Red.`;
 
 const SHARED_FACTS =

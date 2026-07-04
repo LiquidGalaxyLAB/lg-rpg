@@ -16,7 +16,7 @@ const has = (v) => ((v || '').trim() ? 'yes' : 'no');
 console.log(
   `[config] port=${SERVER_CONFIG.port} totalScreens=${SERVER_CONFIG.totalScreens} ` +
   `cheerleader=${String(process.env.CHEERLEADER_ENABLED || '').toLowerCase()} ` +
-  `geminiKey=${has(process.env.GEMINI_API_KEY)} awsKey=${has(process.env.AWS_ACCESS_KEY_ID)} awsRegion=${process.env.AWS_REGION || 'ap-south-1'}`,
+  `geminiKey=${has(process.env.GEMINI_API_KEY)}`,
 );
 
 server.listen(SERVER_CONFIG.port, () => {

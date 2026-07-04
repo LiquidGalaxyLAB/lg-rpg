@@ -79,6 +79,9 @@ function cheerleaderEnemyCount() {
   return state.activeMode.getStatePatch().enemies?.length || 0;
 }
 
+// Last live PvP patch, kept for the finale after the mode instance is cleared.
+let lastPvpSnapshot = null;
+
 // Returns mode-aware match context for the cheerleader commentator.
 export function getCheerleaderContext() {
   const modeId = state.selectedMode;
@@ -88,17 +91,22 @@ export function getCheerleaderContext() {
     players: cheerleaderPlayerSnapshot(),
   };
 
-  // PvP Zone Capture: phase + team scores from the live mode patch.
+  // Keep the last PvP snapshot so the finale still reports the real final score after mode teardown.
   if (modeId === GAME_MODES.PVP) {
-    const pvp = state.activeMode?.getStatePatch?.().pvp || null;
-    const phase = pvp?.phase || 'lock';
-    const remainingMs = phase === 'lock' ? pvp?.lockRemainingMs : pvp?.roundRemainingMs;
+    const live = state.activeMode?.getStatePatch?.().pvp || null;
+    if (live) lastPvpSnapshot = live;
+    const pvp = live || lastPvpSnapshot;
+    const zones = pvp?.zones || [];
     return {
       ...base,
-      phase,
-      timeRemaining: Math.max(0, Math.ceil((remainingMs || 0) / 1000)),
+      phase: live ? pvp?.phase || 'active' : 'ended',
+      timeRemaining: Math.max(0, Math.ceil((pvp?.roundRemainingMs || 0) / 1000)),
       scores: pvp?.scores || { teamA: 0, teamB: 0 },
-      zoneTeam: pvp?.zone?.currentTeam || 'neutral',
+      zonesHeld: {
+        teamA: zones.filter((z) => z.currentTeam === 'teamA').length,
+        teamB: zones.filter((z) => z.currentTeam === 'teamB').length,
+        total: zones.length,
+      },
     };
   }
 

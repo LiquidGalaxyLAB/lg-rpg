@@ -16,13 +16,13 @@ function findObjectLayer(layers, name) {
   return null;
 }
 
-// Extracts non-empty rectangular objects from a Tiled object layer.
+// Extracts non-empty rectangle/ellipse objects from a Tiled object layer.
 function extractRects(layer) {
   if (!layer) return [];
   // Filter out invalid sizes and map to simplified rectangle structures
   return layer.objects
     .filter((o) => o.width > 0 && o.height > 0)
-    .map((o) => ({ x: o.x, y: o.y, width: o.width, height: o.height }));
+    .map((o) => ({ x: o.x, y: o.y, width: o.width, height: o.height, ellipse: o.ellipse === true }));
 }
 
 function attrs(tag) {
