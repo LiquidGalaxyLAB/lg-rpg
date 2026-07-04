@@ -24,6 +24,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isServerBusy = false;
   bool _isBrowserBusy = false;
 
+  /// Which browser action is in flight (`true` = launching), so only the tapped button shows a spinner.
+  bool? _browserBusyOpen;
+  bool _isLogoBusy = false;
+  bool _isKmlBusy = false;
+
   /// Whether the fields have been seeded from the persisted profile yet.
   bool _fieldsInitialized = false;
 
@@ -37,9 +42,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _screenNumberController = TextEditingController(text: "3");
   }
 
-  /// Seeds the text fields from the saved connection profile the first time it
-  /// becomes available, so the persisted screen count (and other settings) are
-  /// not silently replaced by the hardcoded defaults.
+  /// Seeds the text fields from the saved profile once, so persisted settings aren't replaced by the hardcoded defaults.
   void _seedFieldsFromSettings(ConnectionEntity conn) {
     if (_fieldsInitialized || conn.ip.isEmpty) return;
     _fieldsInitialized = true;
@@ -67,9 +70,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _connect() async {
-    // Parse leniently so an empty/typo'd field falls back to a sane default
-    // instead of throwing a FormatException that surfaces as a cryptic
-    // "Failed to connect" message.
+    // Parse leniently so an empty/typo'd field falls back to a sane default instead of a cryptic connect error.
     final port = int.tryParse(_portController.text.trim()) ?? 22;
     final screens = int.tryParse(_screenNumberController.text.trim()) ?? 3;
     final safeScreens = screens < 1 ? 1 : screens;
@@ -121,7 +122,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _runBrowser({required bool open}) async {
-    setState(() => _isBrowserBusy = true);
+    setState(() {
+      _isBrowserBusy = true;
+      _browserBusyOpen = open;
+    });
     final repo = ref.read(lgRepositoryProvider);
     try {
       if (open) {
@@ -134,7 +138,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     } catch (e) {
       _snack('Browser action failed: $e');
     } finally {
-      if (mounted) setState(() => _isBrowserBusy = false);
+      if (mounted) {
+        setState(() {
+          _isBrowserBusy = false;
+          _browserBusyOpen = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _showLogo() async {
+    setState(() => _isLogoBusy = true);
+    try {
+      await ref.read(sendLogoUseCaseProvider).call();
+      _snack('Logo displayed');
+    } catch (e) {
+      _snack('Show logo failed: $e');
+    } finally {
+      if (mounted) setState(() => _isLogoBusy = false);
+    }
+  }
+
+  Future<void> _clearKml() async {
+    setState(() => _isKmlBusy = true);
+    try {
+      await ref.read(cleanKmlUseCaseProvider).call();
+      _snack('KML cleared');
+    } catch (e) {
+      _snack('Clear KML failed: $e');
+    } finally {
+      if (mounted) setState(() => _isKmlBusy = false);
     }
   }
 
@@ -143,7 +176,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final connection = ref.watch(connectionProvider);
     final connected = connection.isConnected;
     final serverRunning = ref.watch(serverRunningProvider);
-    final browserOpen = ref.watch(browserOpenProvider);
 
     _seedFieldsFromSettings(connection);
 
@@ -273,11 +305,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 label: 'Launch Browser',
                 icon: Icons.open_in_browser_rounded,
                 variant: AppButtonVariant.tonal,
-                loading: _isBrowserBusy && !browserOpen,
-                onPressed: (connected &&
-                        serverRunning &&
-                        !browserOpen &&
-                        !_isBrowserBusy)
+                loading: _isBrowserBusy && _browserBusyOpen == true,
+                onPressed: (connected && serverRunning && !_isBrowserBusy)
                     ? () => _runBrowser(open: true)
                     : null,
               ),
@@ -286,10 +315,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 label: 'Close Browser',
                 icon: Icons.cancel_presentation_rounded,
                 variant: AppButtonVariant.danger,
-                loading: _isBrowserBusy && browserOpen,
-                onPressed: (connected && browserOpen && !_isBrowserBusy)
+                loading: _isBrowserBusy && _browserBusyOpen == false,
+                onPressed: (connected && serverRunning && !_isBrowserBusy)
                     ? () => _runBrowser(open: false)
                     : null,
+              ),
+              const SizedBox(height: 26),
+              const SectionLabel('Logo & Overlay'),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Show Logo',
+                icon: Icons.image_outlined,
+                variant: AppButtonVariant.tonal,
+                loading: _isLogoBusy,
+                onPressed: (connected && !_isLogoBusy) ? _showLogo : null,
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Clear KML',
+                icon: Icons.cleaning_services_outlined,
+                variant: AppButtonVariant.danger,
+                loading: _isKmlBusy,
+                onPressed: (connected && !_isKmlBusy) ? _clearKml : null,
               ),
             ],
           ),
