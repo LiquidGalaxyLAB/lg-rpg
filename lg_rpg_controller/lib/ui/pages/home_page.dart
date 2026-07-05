@@ -4,7 +4,6 @@ import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/di/injection_container.dart';
 import 'package:lg_rpg_controller/ui/providers/connection_provider.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
-import 'package:lg_rpg_controller/ui/providers/lg_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
 import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 import 'package:lg_rpg_controller/ui/widgets/lobby_players_section.dart';
@@ -107,7 +106,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     final serverConnected =
         ref.watch(gameServerStatusProvider).value?.isConnected ?? false;
     final lgConnected = ref.watch(connectionProvider).isConnected;
-    final serverRunning = ref.watch(serverRunningProvider);
     final gameServerRepository = ref.watch(gameServerRepositoryProvider);
     // Whether we've actually joined the lobby, not just connected the socket.
     final inLobby = lobby != null;
@@ -219,10 +217,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ? Icons.check_rounded
                       : Icons.wifi_tethering_rounded,
                   loading: _isConnecting,
-                  onPressed: (lgConnected &&
-                          serverRunning &&
-                          !_isConnecting &&
-                          !inLobby)
+                  onPressed: (lgConnected && !_isConnecting && !inLobby)
                       ? _connectToServer
                       : null,
                 ),

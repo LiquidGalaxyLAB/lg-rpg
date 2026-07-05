@@ -58,6 +58,7 @@ async function startGame() {
       preload() {
         this.load.tilemapTiledJSON(mapConfig.key, `assets/${mapConfig.path}`);
         (mapConfig.tilesets || []).forEach(t => this.load.image(t.key, `assets/${t.path}`));
+        this.load.spritesheet('heart', 'assets/items/heart.png', { frameWidth: 16, frameHeight: 16 });
         
         Object.values(playersManifest.players).forEach(p => {
           this.load.spritesheet(p.textureKey, `assets/${p.assetPath}`, { frameWidth: p.frame.width, frameHeight: p.frame.height });
@@ -91,9 +92,14 @@ async function startGame() {
             console.warn(`Map layer not found: ${layerName}`);
           }
         });
-        this.heartGraphics = this.add.graphics().setDepth(1);
         // Drawn above the ground but below sprites (sprites use depth = world y).
         this.pvpGraphics = this.add.graphics().setDepth(2);
+        this.heartSprites = new Map();
+        this.anims.create({
+          key: 'heart:pulse',
+          frames: this.anims.generateFrameNumbers('heart', { start: 0, end: 5 }),
+          frameRate: 8, repeat: -1,
+        });
 
         socket.on(SOCKET_EVENTS.GAME_STATE, d => {
           this.serverPlayers = d.players || [];
@@ -183,17 +189,27 @@ async function startGame() {
         }
       }
 
-      // Renders the healing items on the screen.
+      // Syncs the animated heart pickup sprites with server state.
       drawHearts() {
-        const g = this.heartGraphics.clear(), s = 18;
-        this.serverHearts.forEach(heart => {
+        const activeIds = new Set();
+        for (const heart of this.serverHearts) {
+          activeIds.add(heart.id);
           const localX = heart.x - this.cameraOffset;
-          if (localX < -40 || localX > GAME_VIEW.screenWidth + 40) return;
-          g.fillStyle(0xff3b5c, 1);
-          g.fillCircle(localX - s * 0.45, heart.y - s * 0.35, s * 0.5);
-          g.fillCircle(localX + s * 0.45, heart.y - s * 0.35, s * 0.5);
-          g.fillTriangle(localX - s, heart.y - s * 0.15, localX + s, heart.y - s * 0.15, localX, heart.y + s);
-        });
+          let sprite = this.heartSprites.get(heart.id);
+          if (!sprite) {
+            sprite = this.add.sprite(localX, heart.y, 'heart', 0).setOrigin(0.5).setScale(2).setDepth(1);
+            sprite.play('heart:pulse');
+            this.heartSprites.set(heart.id, sprite);
+          }
+          sprite.setPosition(localX, heart.y);
+          sprite.setVisible(localX > -40 && localX < GAME_VIEW.screenWidth + 40);
+        }
+        for (const [id, sprite] of this.heartSprites) {
+          if (!activeIds.has(id)) {
+            sprite.destroy();
+            this.heartSprites.delete(id);
+          }
+        }
       }
 
       // Resolves the asset configuration and animations for a player.
