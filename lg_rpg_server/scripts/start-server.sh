@@ -99,9 +99,10 @@ for i in $(seq 1 30); do
   fi
   # A dead process will never become healthy: report the real reason immediately.
   if [ -n "${SERVER_PID:-}" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    # First "Error" line carries the message; stack frames below it are noise.
+    # First real error line carries the message ("Error:", "Error [CODE]", "TypeError:", ...);
+    # a bare 'Error' match would hit Node's ErrorCaptureStackTrace internals line first.
     # Fallback to the first line for errors without the word (e.g. glibc).
-    REASON="$(grep -m1 'Error' logs/boot-error.log 2>/dev/null || head -n 1 logs/boot-error.log 2>/dev/null)"
+    REASON="$(grep -m1 -E 'Error(:| \[)' logs/boot-error.log 2>/dev/null || head -n 1 logs/boot-error.log 2>/dev/null)"
     echo "Error: server crashed on startup: ${REASON:-no error output; check logs/server.log}"
     exit 1
   fi
