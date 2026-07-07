@@ -1,4 +1,4 @@
-import { GAME_PHASES, MATCH, PLAYER_DEFAULTS, SOCKET_EVENTS } from '../game_constants.js';
+import { ENEMY_SPAWN, GAME_PHASES, MATCH, PLAYER_DEFAULTS, SOCKET_EVENTS } from '../game_constants.js';
 import { io } from './app.js';
 import { state } from './state.js';
 import { emitGameEvent } from './cheerleader-bridge.js';
@@ -38,7 +38,9 @@ export function endMatch(reason = 'all-dead', result = null) {
   const results = Array.from(state.players.values())
     .map((p) => ({ playerId: p.playerId, name: p.name, kills: p.kills || 0, team: p.team || null }))
     .sort((a, b) => b.kills - a.kills);
-  const survivedMs = Date.now() - state.matchStartedAt;
+  // Exclude the enemy-free warmup window so co-op "Survived" reflects combat time.
+  const rawMs = Date.now() - state.matchStartedAt;
+  const survivedMs = result ? rawMs : Math.max(0, rawMs - ENEMY_SPAWN.warmupMs);
   const cheerEvent = result ? 'match_won' : outcome === 'win' ? 'match_won' : 'match_lost';
   // PvP results carry the winner and score so the commentator announces them correctly.
   emitGameEvent(cheerEvent, {

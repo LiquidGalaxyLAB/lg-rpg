@@ -11,17 +11,52 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$PROJECT_ROOT"
+mkdir -p logs
+
+if [ "$TOTAL_SCREENS" != "3" ] && [ "$TOTAL_SCREENS" != "5" ]; then
+  echo "Error: Screen number must be 3 or 5."
+  exit 1
+fi
+
+# Fail fast with a clear reason instead of letting `node` calls die silently.
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: node not found. Install Node 16 via nvm and set a default alias (nvm alias default 16)."
+  exit 1
+fi
+
+# Every curl gets a timeout: a wedged process on the port must not hang this script.
+CURL="curl -sf --max-time 2"
+
+is_healthy() {
+  $CURL "http://localhost:${PORT}/api/health" > /dev/null 2>&1
+}
 
 read_running_screens() {
-  curl -sf "http://localhost:${PORT}/api/config" \
+  $CURL "http://localhost:${PORT}/api/config" \
     | node -e "let s=''; process.stdin.on('data', d => s += d); process.stdin.on('end', () => { try { console.log(JSON.parse(s).totalScreens || ''); } catch { console.log(''); } });"
 }
 
+# The port can be held by a stuck server or a foreign process that never answers
+# health checks; nothing else legitimately owns it, so reclaim it.
+free_port() {
+  if fuser -n tcp "$PORT" >/dev/null 2>&1; then
+    echo "Port ${PORT} is held by an unresponsive process; freeing it."
+    fuser -k -n tcp "$PORT" >/dev/null 2>&1 || true
+    sleep 1
+    if fuser -n tcp "$PORT" >/dev/null 2>&1; then
+      echo "Error: port ${PORT} is occupied and could not be freed. Run 'ss -ltnp | grep ${PORT}' on the LG."
+      exit 1
+    fi
+  fi
+}
+
 start_server() {
-  echo "Starting LG RPG server | Root: $PROJECT_ROOT | Port: $PORT | Screens: $TOTAL_SCREENS"
-  # Output is captured in-app to logs/server.log (see src/lib/file-logger.js).
-  TOTAL_SCREENS="$TOTAL_SCREENS" PORT="$PORT" node server.js > /dev/null 2>&1 &
-  echo "PID: $!"
+  echo "Starting LG RPG server | Root: $PROJECT_ROOT | Port: $PORT | Screens: $TOTAL_SCREENS | Node: $(node -v)"
+  # stdout is mirrored in-app to logs/server.log (src/lib/file-logger.js);
+  # stderr goes to boot-error.log so import/loader crashes are not lost.
+  TOTAL_SCREENS="$TOTAL_SCREENS" PORT="$PORT" node server.js > /dev/null 2> logs/boot-error.log &
+  SERVER_PID=$!
+  echo "PID: $SERVER_PID"
 }
 
 stop_server() {
@@ -29,7 +64,7 @@ stop_server() {
   # Wait until the port is actually released before relaunching, otherwise the
   # new node process races the dying one and crashes with EADDRINUSE.
   for _ in $(seq 1 20); do
-    if ! curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
+    if ! is_healthy; then
       echo "Stopped existing Node.js server."
       return 0
     fi
@@ -41,27 +76,37 @@ stop_server() {
   echo "Force-stopped existing Node.js server."
 }
 
-if curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
+if is_healthy; then
   CURRENT_SCREENS="$(read_running_screens || true)"
   if [ "$CURRENT_SCREENS" = "$TOTAL_SCREENS" ]; then
     echo "Server is already running on port ${PORT} with ${TOTAL_SCREENS} screens."
   else
     echo "Server is running with ${CURRENT_SCREENS:-unknown} screens; requested ${TOTAL_SCREENS}. Restarting."
     stop_server
+    free_port
     start_server
   fi
 else
+  free_port
   start_server
 fi
 
 echo "Waiting for server to be ready..."
-for i in $(seq 1 45); do
-  if curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
+for i in $(seq 1 30); do
+  if is_healthy; then
     echo "Server is healthy."
     break
   fi
-  if [ "$i" -eq 45 ]; then
-    echo "Error: server failed to start. Check logs/server.log"
+  # A dead process will never become healthy: report the real reason immediately.
+  if [ -n "${SERVER_PID:-}" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    # First "Error" line carries the message; stack frames below it are noise.
+    # Fallback to the first line for errors without the word (e.g. glibc).
+    REASON="$(grep -m1 'Error' logs/boot-error.log 2>/dev/null || head -n 1 logs/boot-error.log 2>/dev/null)"
+    echo "Error: server crashed on startup: ${REASON:-no error output; check logs/server.log}"
+    exit 1
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "Error: server did not become healthy within 30s. Check logs/server.log and logs/boot-error.log"
     exit 1
   fi
   sleep 1

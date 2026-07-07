@@ -4,7 +4,11 @@ set -e
 
 TOTAL_SCREENS="${1:-3}"
 PORT="${2:-3000}"
-SERVER_IP="${3:-10.42.6.1}"
+SERVER_IP="${3:-}"
+if [ -z "$SERVER_IP" ]; then
+  SERVER_IP="10.42.6.1"
+  echo "Warning: no server IP given; defaulting to ${SERVER_IP}. If screens stay blank, pass the master's IP as the 3rd argument."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
+import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 import 'package:lg_rpg_controller/ui/providers/game_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
 
@@ -87,7 +88,8 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
               const SizedBox(height: 12),
               Text(
                 subtitle,
-                style: const TextStyle(fontSize: 16, color: Colors.white70),
+                style: const TextStyle(
+                    fontSize: 16, color: AppColors.onSurfaceMuted),
               ),
             ],
           ),
