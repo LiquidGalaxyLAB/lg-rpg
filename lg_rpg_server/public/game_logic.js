@@ -40,6 +40,21 @@ async function startGame() {
 
     const playersManifest = await fetchJson('assets/players/players.json');
     const enemiesManifest = configData.selectedMode === 'zombie' ? await fetchJson('assets/enemies/enemies.json').catch(() => null) : null;
+    const playerDefinitions = [
+      ...Object.values(playersManifest.players || {}),
+      ...Object.values(playersManifest.animationSheetPlayers || {}),
+    ];
+
+    function resolvePlayerDefinition(key) {
+      return playersManifest.players?.[key]
+        ?? playersManifest.animationSheetPlayers?.[key]
+        ?? playersManifest.players?.[playersManifest.defaultPlayer]
+        ?? playersManifest.animationSheetPlayers?.[playersManifest.defaultPlayer];
+    }
+
+    function playerAnimationPrefix(def) {
+      return def.textureKeyPrefix ?? def.textureKey;
+    }
 
     // Main Phaser game scene managing player, enemy, and heart entities.
     class LgRPG extends Phaser.Scene {
@@ -59,9 +74,21 @@ async function startGame() {
         this.load.tilemapTiledJSON(mapConfig.key, `assets/${mapConfig.path}`);
         (mapConfig.tilesets || []).forEach(t => this.load.image(t.key, `assets/${t.path}`));
         this.load.spritesheet('heart', 'assets/items/heart.png', { frameWidth: 16, frameHeight: 16 });
+
+        if (configData.selectedMode === 'zombie') {
+          this.load.spritesheet('rain', 'assets/fx/Rain.png', { frameWidth: 8, frameHeight: 8 });
+          this.load.spritesheet('rain-floor', 'assets/fx/RainOnFloor.png', { frameWidth: 8, frameHeight: 8 });
+        }
         
-        Object.values(playersManifest.players).forEach(p => {
-          this.load.spritesheet(p.textureKey, `assets/${p.assetPath}`, { frameWidth: p.frame.width, frameHeight: p.frame.height });
+        playerDefinitions.forEach(p => {
+          if (p.assetMode === 'animationSheets') {
+            const { width, height } = p.frame;
+            Object.entries(p.animations).forEach(([animName, anim]) => {
+              this.load.spritesheet(`${p.textureKeyPrefix}:${animName}`, `assets/${anim.path}`, { frameWidth: width, frameHeight: height });
+            });
+          } else {
+            this.load.spritesheet(p.textureKey, `assets/${p.assetPath}`, { frameWidth: p.frame.width, frameHeight: p.frame.height });
+          }
         });
 
         if (enemiesManifest) {
@@ -94,6 +121,7 @@ async function startGame() {
         });
         // Drawn above the ground but below sprites (sprites use depth = world y).
         this.pvpGraphics = this.add.graphics().setDepth(2);
+        if (configData.selectedMode === 'zombie') this.createWeather();
         this.heartSprites = new Map();
         this.anims.create({
           key: 'heart:pulse',
@@ -123,11 +151,16 @@ async function startGame() {
         this.phase = configData.phase || GAME_PHASES.LOBBY;
         if (this.phase !== GAME_PHASES.PLAYING) this.showWaiting();
 
-        Object.values(playersManifest.players).forEach(def => {
+        playerDefinitions.forEach(def => {
+          const prefix = playerAnimationPrefix(def);
           Object.entries(def.animations).forEach(([name, anim]) => {
+            const textureKey = def.assetMode === 'animationSheets' ? `${prefix}:${name}` : def.textureKey;
+            const frameRange = def.assetMode === 'animationSheets'
+              ? { start: 0, end: anim.frames - 1 }
+              : { start: anim.frames.start, end: anim.frames.end };
             this.anims.create({
-              key: `${def.textureKey}:${name}`,
-              frames: this.anims.generateFrameNumbers(def.textureKey, { start: anim.frames.start, end: anim.frames.end }),
+              key: `${prefix}:${name}`,
+              frames: this.anims.generateFrameNumbers(textureKey, frameRange),
               frameRate: anim.frameRate, repeat: anim.repeat,
             });
           });
@@ -147,13 +180,71 @@ async function startGame() {
       }
 
       // Syncs player and enemy sprites with server updates every frame.
-      update() {
+      update(_time, delta) {
         this.syncSprites(this.serverPlayers, this.playerSprites, 'playerId', p => this.resolvePlayerConfig(p));
         if (enemiesManifest) {
           this.syncSprites(this.serverEnemies, this.enemySprites, 'id', e => this.resolveEnemyConfig(e));
         }
         this.drawHearts();
         this.drawPvp();
+        if (this.rainDrops) this.updateWeather(delta / 1000);
+      }
+
+      // Creates the zombie-mode rain: drops and floor splashes simulated in this
+      // screen's local coordinates (rain is uniform, so screens don't need to share one simulation).
+      createWeather() {
+        const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
+        this.rainDrops = [];
+        this.rainSplashes = [];
+
+        const dropCount = Math.round((w * h) / 3600);
+        for (let i = 0; i < dropCount; i++) {
+          const drop = this.add.image(
+            Phaser.Math.Between(-80, w + 80), Phaser.Math.Between(-160, h + 80),
+            'rain', Phaser.Math.Between(0, 2)
+          );
+          drop.setDepth(5000); // above sprites (depth = y), below the waiting overlay (9000)
+          drop.setScale(Phaser.Math.FloatBetween(1.0, 1.8));
+          drop.setAlpha(Phaser.Math.FloatBetween(0.26, 0.62));
+          drop.speed = Phaser.Math.FloatBetween(260, 520);
+          drop.wind = Phaser.Math.FloatBetween(-95, -45);
+          this.rainDrops.push(drop);
+        }
+
+        const splashCount = Math.round((w * h) / 15000);
+        for (let i = 0; i < splashCount; i++) {
+          const splash = this.add.image(
+            Phaser.Math.Between(0, w), Phaser.Math.Between(0, h),
+            'rain-floor', Phaser.Math.Between(0, 2)
+          );
+          splash.setDepth(5000);
+          splash.setScale(Phaser.Math.FloatBetween(1.1, 1.7));
+          splash.setAlpha(Phaser.Math.FloatBetween(0.10, 0.32));
+          splash.life = Phaser.Math.FloatBetween(0, 1);
+          this.rainSplashes.push(splash);
+        }
+      }
+
+      // Advances rain drops and recycles them once they leave this screen's slice.
+      updateWeather(dt) {
+        const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
+        for (const drop of this.rainDrops) {
+          drop.x += drop.wind * dt;
+          drop.y += drop.speed * dt;
+          if (drop.y > h + 24 || drop.x < -120) {
+            drop.x = Phaser.Math.Between(0, w + 120);
+            drop.y = Phaser.Math.Between(-140, -10);
+          }
+        }
+        for (const splash of this.rainSplashes) {
+          splash.life += dt * 1.8;
+          splash.alpha = 0.1 + Math.abs(Math.sin(splash.life * Math.PI)) * 0.35;
+          if (splash.life > 1) {
+            splash.life = 0;
+            splash.x = Phaser.Math.Between(0, w);
+            splash.y = Phaser.Math.Between(0, h);
+          }
+        }
       }
 
       // Renders the PvP capture zones, team spawn boxes, and team markers under each player.
@@ -215,10 +306,10 @@ async function startGame() {
       // Resolves the asset configuration and animations for a player.
       resolvePlayerConfig(entity) {
         const key = entity?.character ?? playersManifest.defaultPlayer;
-        const def = playersManifest.players[key] ?? playersManifest.players[playersManifest.defaultPlayer];
-        const prefix = def.textureKey, anims = def.animations;
+        const def = resolvePlayerDefinition(key);
+        const prefix = playerAnimationPrefix(def), anims = def.animations;
         return {
-          textureKey: def.textureKey,
+          textureKey: def.assetMode === 'animationSheets' ? `${prefix}:${def.defaultAnimation}` : def.textureKey,
           idleAnim: `${prefix}:${def.defaultAnimation}`,
           walkAnim: anims.walk ? `${prefix}:walk` : null,
           actions: {
