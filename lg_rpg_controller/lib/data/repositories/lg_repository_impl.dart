@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/core/constant/log_service.dart';
@@ -73,10 +75,27 @@ class LgRepositoryImpl implements LGRepository {
     // Open the firewall first so the controller can actually reach the server.
     await _openFirewallPort(GameServerConfig.port);
 
-    // Run the script in the foreground so its stop/restart logic finishes before we verify; it backgrounds node itself.
-    await _execute(
-        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x start-server.sh && '
-        'bash -l ./start-server.sh $screenNumber > ../logs/launch.log 2>&1');
+    try {
+      // Run the script in the foreground so its stop/restart logic finishes before we verify; it backgrounds node itself.
+      await _execute(
+              'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x start-server.sh && '
+              'bash -l ./start-server.sh $screenNumber > ../logs/launch.log 2>&1')
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      throw Exception(
+          'The LG did not respond within 60s while starting the server. '
+          'Check logs/launch.log on the LG.');
+    }
+
+    // The script reports failures on a single "Error: ..." line; surface that
+    // real reason instead of polling a server that will never come up.
+    final logTail =
+        await _execute('tail -n 5 ~/lg-rpg-server/logs/launch.log') ?? '';
+    final errorLines =
+        logTail.split('\n').where((l) => l.trim().startsWith('Error:'));
+    if (errorLines.isNotEmpty) {
+      throw Exception('Server start failed — ${errorLines.first.trim()}');
+    }
 
     await _waitForServerConfigured(screenNumber);
     log.i('LG server started with $screenNumber screen(s) on port '
@@ -86,23 +105,31 @@ class LgRepositoryImpl implements LGRepository {
   /// Polls `/api/config` until the running server reports [expectedScreens].
   Future<void> _waitForServerConfigured(
     int expectedScreens, {
-    int attempts = 20,
+    int attempts = 10,
     Duration interval = const Duration(seconds: 1),
   }) async {
     final url = 'http://localhost:${GameServerConfig.port}/api/config';
+    int? seenScreens;
     for (int i = 0; i < attempts; i++) {
       final body = await _execute('curl -s --max-time 2 "$url" || true');
       if (body != null) {
         final match = RegExp(r'"totalScreens"\s*:\s*(\d+)').firstMatch(body);
-        if (match != null && int.tryParse(match.group(1)!) == expectedScreens) {
-          return;
+        if (match != null) {
+          seenScreens = int.tryParse(match.group(1)!);
+          if (seenScreens == expectedScreens) {
+            return;
+          }
         }
       }
       await Future.delayed(interval);
     }
+    // Distinguish "wrong screen count" from "server never responded".
     throw Exception(
-      'Server did not come up with $expectedScreens screen(s) on port '
-      '${GameServerConfig.port}. Check logs/launch.log on the LG.',
+      seenScreens != null
+          ? 'Server is running with $seenScreens screen(s), expected '
+              '$expectedScreens. Stop the server and start it again.'
+          : 'Server did not respond on port ${GameServerConfig.port}. '
+              'Check logs/launch.log on the LG.',
     );
   }
 
@@ -123,8 +150,12 @@ class LgRepositoryImpl implements LGRepository {
 
   @override
   Future<void> launchBrowser() async {
+    // Browsers must load the game from the same address the phones use;
+    // otherwise the script falls back to its hard-coded default IP.
+    final settings = await _storageDataSource.loadSettings();
+    final serverIp = settings?.ip.trim() ?? '';
     await _execute(
-        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber > ../logs/launch.log 2>&1 &');
+        'cd ~/lg-rpg-server/scripts && mkdir -p ../logs && chmod +x launch-browsers.sh && nohup bash -l ./launch-browsers.sh $screenNumber ${GameServerConfig.port} $serverIp > ../logs/launch-browsers.log 2>&1 &');
     log.i('LG browsers launch command sent');
   }
 
