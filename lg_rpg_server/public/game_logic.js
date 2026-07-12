@@ -1,5 +1,8 @@
 // Client-side game logic that renders the map, sprites, and UI using Phaser.
 import { GAME_VIEW, GAME_PHASES, SOCKET_EVENTS } from './shared_constants.js';
+import { drawPvp, drawHearts, showWaiting, hideWaiting } from './scene/overlays.js';
+import { createWeather, updateWeather } from './scene/weather.js';
+import { deathBurst, spillShards, healPopup } from './scene/effects.js';
 
 // Parse the screen number parameter to determine this screen's role.
 const urlParams = new URLSearchParams(window.location.search);
@@ -67,6 +70,8 @@ async function startGame() {
         this.serverPvp = null;
         this.playerSprites = new Map();
         this.enemySprites = new Map();
+        this.projectileSprites = new Map();
+        this.serverProjectiles = [];
       }
 
       // Loads map JSON, tileset images, player spritesheets, and enemy spritesheets.
@@ -79,7 +84,7 @@ async function startGame() {
           this.load.spritesheet('rain', 'assets/fx/Rain.png', { frameWidth: 8, frameHeight: 8 });
           this.load.spritesheet('rain-floor', 'assets/fx/RainOnFloor.png', { frameWidth: 8, frameHeight: 8 });
         }
-        
+
         playerDefinitions.forEach(p => {
           if (p.assetMode === 'animationSheets') {
             const { width, height } = p.frame;
@@ -96,6 +101,10 @@ async function startGame() {
             const { width, height } = def.frame;
             Object.entries(def.animations).forEach(([animName, anim]) => {
               this.load.spritesheet(`${def.textureKeyPrefix}:${animName}`, `assets/${anim.path}`, { frameWidth: width, frameHeight: height });
+            });
+            Object.entries(def.projectiles || {}).forEach(([name, proj]) => {
+              this.load.spritesheet(`${def.textureKeyPrefix}:proj:${name}`, `assets/${proj.path}`,
+                { frameWidth: proj.frame.width, frameHeight: proj.frame.height });
             });
           });
         }
@@ -121,7 +130,9 @@ async function startGame() {
         });
         // Drawn above the ground but below sprites (sprites use depth = world y).
         this.pvpGraphics = this.add.graphics().setDepth(2);
-        if (configData.selectedMode === 'zombie') this.createWeather();
+        if (configData.selectedMode === 'zombie') {
+          createWeather(this);
+        }
         this.heartSprites = new Map();
         this.anims.create({
           key: 'heart:pulse',
@@ -132,6 +143,7 @@ async function startGame() {
         socket.on(SOCKET_EVENTS.GAME_STATE, d => {
           this.serverPlayers = d.players || [];
           this.serverEnemies = d.enemies || [];
+          this.serverProjectiles = d.projectiles || [];
           this.serverHearts = d.hearts || [];
           this.serverMatch = d.match || null;
           this.serverPvp = d.pvp || null;
@@ -139,17 +151,17 @@ async function startGame() {
 
         socket.on(SOCKET_EVENTS.GAME_OVER, () => {
           this.phase = GAME_PHASES.LOBBY;
-          this.showWaiting();
+          showWaiting(this);
         });
 
         socket.on(SOCKET_EVENTS.GAME_STARTED, d => {
           if (d?.map?.key && d.map.key !== mapConfig.key) return window.location.reload();
           this.phase = GAME_PHASES.PLAYING;
-          this.hideWaiting();
+          hideWaiting(this);
         });
 
         this.phase = configData.phase || GAME_PHASES.LOBBY;
-        if (this.phase !== GAME_PHASES.PLAYING) this.showWaiting();
+        if (this.phase !== GAME_PHASES.PLAYING) showWaiting(this);
 
         playerDefinitions.forEach(def => {
           const prefix = playerAnimationPrefix(def);
@@ -175,6 +187,21 @@ async function startGame() {
                 frameRate: anim.frameRate, repeat: anim.repeat,
               });
             });
+            // Split each projectile sheet at spinFrames into a looping "spin" (in flight) and a one-shot "boom" (explosion).
+            Object.entries(def.projectiles || {}).forEach(([name, proj]) => {
+              const key = `${def.textureKeyPrefix}:proj:${name}`;
+              const spin = proj.spinFrames ?? proj.frames;
+              this.anims.create({
+                key: `${key}:spin`,
+                frames: this.anims.generateFrameNumbers(key, { start: 0, end: spin - 1 }),
+                frameRate: proj.spinFrameRate ?? 12, repeat: -1,
+              });
+              this.anims.create({
+                key: `${key}:boom`,
+                frames: this.anims.generateFrameNumbers(key, { start: spin, end: proj.frames - 1 }),
+                frameRate: proj.boomFrameRate ?? 12, repeat: 0,
+              });
+            });
           });
         }
       }
@@ -185,122 +212,10 @@ async function startGame() {
         if (enemiesManifest) {
           this.syncSprites(this.serverEnemies, this.enemySprites, 'id', e => this.resolveEnemyConfig(e));
         }
-        this.drawHearts();
-        this.drawPvp();
-        if (this.rainDrops) this.updateWeather(delta / 1000);
-      }
-
-      // Creates the zombie-mode rain: drops and floor splashes simulated in this
-      // screen's local coordinates (rain is uniform, so screens don't need to share one simulation).
-      createWeather() {
-        const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
-        this.rainDrops = [];
-        this.rainSplashes = [];
-
-        const dropCount = Math.round((w * h) / 3600);
-        for (let i = 0; i < dropCount; i++) {
-          const drop = this.add.image(
-            Phaser.Math.Between(-80, w + 80), Phaser.Math.Between(-160, h + 80),
-            'rain', Phaser.Math.Between(0, 2)
-          );
-          drop.setDepth(5000); // above sprites (depth = y), below the waiting overlay (9000)
-          drop.setScale(Phaser.Math.FloatBetween(1.0, 1.8));
-          drop.setAlpha(Phaser.Math.FloatBetween(0.26, 0.62));
-          drop.speed = Phaser.Math.FloatBetween(260, 520);
-          drop.wind = Phaser.Math.FloatBetween(-95, -45);
-          this.rainDrops.push(drop);
-        }
-
-        const splashCount = Math.round((w * h) / 15000);
-        for (let i = 0; i < splashCount; i++) {
-          const splash = this.add.image(
-            Phaser.Math.Between(0, w), Phaser.Math.Between(0, h),
-            'rain-floor', Phaser.Math.Between(0, 2)
-          );
-          splash.setDepth(5000);
-          splash.setScale(Phaser.Math.FloatBetween(1.1, 1.7));
-          splash.setAlpha(Phaser.Math.FloatBetween(0.10, 0.32));
-          splash.life = Phaser.Math.FloatBetween(0, 1);
-          this.rainSplashes.push(splash);
-        }
-      }
-
-      // Advances rain drops and recycles them once they leave this screen's slice.
-      updateWeather(dt) {
-        const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
-        for (const drop of this.rainDrops) {
-          drop.x += drop.wind * dt;
-          drop.y += drop.speed * dt;
-          if (drop.y > h + 24 || drop.x < -120) {
-            drop.x = Phaser.Math.Between(0, w + 120);
-            drop.y = Phaser.Math.Between(-140, -10);
-          }
-        }
-        for (const splash of this.rainSplashes) {
-          splash.life += dt * 1.8;
-          splash.alpha = 0.1 + Math.abs(Math.sin(splash.life * Math.PI)) * 0.35;
-          if (splash.life > 1) {
-            splash.life = 0;
-            splash.x = Phaser.Math.Between(0, w);
-            splash.y = Phaser.Math.Between(0, h);
-          }
-        }
-      }
-
-      // Renders the PvP capture zones, team spawn boxes, and team markers under each player.
-      drawPvp() {
-        const g = this.pvpGraphics.clear();
-        const pvp = this.serverPvp;
-        if (!pvp) return;
-        const off = this.cameraOffset, W = GAME_VIEW.screenWidth;
-        const teamColor = (t) => (t === 'teamA' ? 0x1f6feb : t === 'teamB' ? 0xda3633 : 0xffffff);
-
-        for (const z of pvp.zones || []) {
-          const c = teamColor(z.currentTeam);
-          if (z.ellipse) {
-            const cx = z.x + z.width / 2 - off, cy = z.y + z.height / 2;
-            g.fillStyle(c, 0.18).fillEllipse(cx, cy, z.width, z.height);
-            g.lineStyle(3, c, 0.9).strokeEllipse(cx, cy, z.width, z.height);
-          } else {
-            g.fillStyle(c, 0.18).fillRect(z.x - off, z.y, z.width, z.height);
-            g.lineStyle(3, c, 0.9).strokeRect(z.x - off, z.y, z.width, z.height);
-          }
-        }
-        for (const team of ['teamA', 'teamB']) {
-          const b = pvp.spawns?.[team];
-          if (!b) continue;
-          g.lineStyle(2, teamColor(team), 0.85).strokeRect(b.x - off, b.y, b.width, b.height);
-        }
-        for (const p of this.serverPlayers) {
-          if (!p.team) continue;
-          const lx = p.x - off;
-          if (lx < -40 || lx > W + 40) continue;
-          g.fillStyle(teamColor(p.team), p.dead ? 0.25 : 0.9);
-          g.fillCircle(lx, p.y - 2, 7);
-        }
-      }
-
-      // Syncs the animated heart pickup sprites with server state.
-      drawHearts() {
-        const activeIds = new Set();
-        for (const heart of this.serverHearts) {
-          activeIds.add(heart.id);
-          const localX = heart.x - this.cameraOffset;
-          let sprite = this.heartSprites.get(heart.id);
-          if (!sprite) {
-            sprite = this.add.sprite(localX, heart.y, 'heart', 0).setOrigin(0.5).setScale(2).setDepth(1);
-            sprite.play('heart:pulse');
-            this.heartSprites.set(heart.id, sprite);
-          }
-          sprite.setPosition(localX, heart.y);
-          sprite.setVisible(localX > -40 && localX < GAME_VIEW.screenWidth + 40);
-        }
-        for (const [id, sprite] of this.heartSprites) {
-          if (!activeIds.has(id)) {
-            sprite.destroy();
-            this.heartSprites.delete(id);
-          }
-        }
+        this.syncProjectiles();
+        drawHearts(this);
+        drawPvp(this);
+        if (this.rainDrops) updateWeather(this, delta / 1000);
       }
 
       // Resolves the asset configuration and animations for a player.
@@ -330,10 +245,73 @@ async function startGame() {
           walkAnim: anims.walk ? `${prefix}:walk` : anims.run ? `${prefix}:run` : null,
           actions: {
             attack: Object.keys(anims).filter(n => n.startsWith('attack')).map(n => `${prefix}:${n}`),
+            throw: anims.throw ? `${prefix}:throw` : null,
             death: anims.death ? `${prefix}:death` : null,
+            hurt: anims.take_hit ? `${prefix}:take_hit` : anims.hurt ? `${prefix}:hurt` : null,
           },
           scale: def.render.scale, origin: def.render.origin,
         };
+      }
+
+      // Average body color of an entity's spritesheet (first frame), cached per texture, so shards match what they burst from.
+      entityColor(textureKey) {
+        this.colorCache ??= new Map();
+        if (!this.colorCache.has(textureKey)) {
+          const frame = this.textures.getFrame(textureKey, 0);
+          const steps = 7;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let i = 1; frame && i < steps; i++) {
+            for (let j = 1; j < steps; j++) {
+              const px = this.textures.getPixel(
+                Math.floor((frame.width * i) / steps),
+                Math.floor((frame.height * j) / steps),
+                textureKey, 0,
+              );
+              if (px && px.alpha > 128) { r += px.red; g += px.green; b += px.blue; n++; }
+            }
+          }
+          this.colorCache.set(textureKey, n
+            ? Phaser.Display.Color.GetColor(Math.round(r / n), Math.round(g / n), Math.round(b / n))
+            : 0x8a7f70);
+        }
+        return this.colorCache.get(textureKey);
+      }
+
+      onScreen(x) {
+        return x > -GAME_VIEW.fadeZone && x < GAME_VIEW.screenWidth + GAME_VIEW.fadeZone;
+      }
+
+      // Flies bombs along their arc and plays the explosion when they land.
+      syncProjectiles() {
+        const active = new Set();
+        for (const proj of this.serverProjectiles) {
+          active.add(proj.id);
+          const localX = proj.x - this.cameraOffset;
+          let sprite = this.projectileSprites.get(proj.id);
+          if (!sprite) {
+            sprite = this.add.sprite(localX, proj.y, proj.sprite, 0).setScale(0.8).setDepth(proj.y + 40);
+            sprite.exploded = false;
+            sprite.play(`${proj.sprite}:spin`);
+            this.projectileSprites.set(proj.id, sprite);
+          }
+          sprite.setPosition(localX, proj.y);
+          if (proj.exploded && !sprite.exploded) {
+            sprite.exploded = true;
+            sprite.setDepth(100000); // blast draws over everything
+            sprite.play(`${proj.sprite}:boom`);
+            // Only the screen the blast lands on shakes, so a distant bomb doesn't rattle every screen.
+            if (this.onScreen(localX)) this.cameras.main.shake(140, 0.004);
+            spillShards(this, localX, proj.y, [0x8a4b12, 0x5a3208, 0xc26a1a],
+              { count: 14, minLife: 250, maxLife: 550 });
+          }
+          sprite.setVisible(this.onScreen(localX));
+        }
+        for (const [id, sprite] of this.projectileSprites) {
+          if (!active.has(id)) {
+            sprite.destroy();
+            this.projectileSprites.delete(id);
+          }
+        }
       }
 
       // Updates sprite positions, plays animations, and manages visibility based on server state.
@@ -362,10 +340,21 @@ async function startGame() {
             let key = null;
             if (entity.action === 'attack' && actions.attack?.length) {
               key = actions.attack[Math.floor(Math.random() * actions.attack.length)];
+            } else if (entity.action === 'throw' && actions.throw) {
+              key = actions.throw;
             } else if (entity.action === 'death') {
               key = actions.death;
+              const color = this.entityColor(sprite.cfg.textureKey);
+              if (idKey === 'playerId') deathBurst(this, localX, entity.y, color);
+              else spillShards(this, localX, entity.y, color, { count: 12, minLife: 300, maxLife: 600 });
             } else if ((entity.action === 'take_hit' || entity.action === 'hurt') && actions.hurt) {
               key = actions.hurt;
+              // Enemies spark in their own color; players bleed blood-red so player damage stands out.
+              const isPlayer = idKey === 'playerId';
+              spillShards(this, localX, entity.y, isPlayer ? [0x8a0303, 0x6e0d0d, 0xa31212] : this.entityColor(sprite.cfg.textureKey),
+                { count: isPlayer ? 7 : 5, maxSpeed: 120, minLife: 180, maxLife: 320, follow: sprite });
+              // Recolor the white flash of the hurt animation into a red damage flash.
+              if (isPlayer) sprite.hurtTintUntil = this.time.now + 300;
             }
             if (key) {
               sprite.lockKey = key;
@@ -395,11 +384,25 @@ async function startGame() {
           let alpha = isFirst ? 1 : Math.min(1, localX / fade);
           if (!isLast) alpha = Math.min(alpha, (screenW - localX) / fade);
           if (entity.dead) alpha *= 0.4;
-          sprite.setAlpha(Phaser.Math.Clamp(alpha, 0, 1)).setTint(entity.dead ? 0x777777 : 0xffffff);
+
+          sprite.setAlpha(Phaser.Math.Clamp(alpha, 0, 1)).setTint(
+            entity.dead ? 0x777777
+              : this.time.now < (sprite.hurtTintUntil || 0) ? 0xd63b3b
+              : this.time.now < (sprite.healTintUntil || 0) ? 0x5bffa0
+              : 0xffffff,
+          );
 
           const visible = localX > -fade && localX < screenW + fade;
           sprite.setVisible(visible).setDepth(entity.y);
           this.drawHealthBar(sprite, entity, localX, visible, idKey);
+          if (idKey === 'playerId') {
+            // Detect a heal (only hearts raise HP) and pop a green "+N" + flash. Guard against the respawn HP reset (was dead / HP was 0).
+            if (sprite.lastHp != null && sprite.lastHp > 0 && !entity.dead && entity.hp > sprite.lastHp) {
+              if (visible) healPopup(this, localX, entity.y);
+              sprite.healTintUntil = this.time.now + 350;
+            }
+            sprite.lastHp = entity.hp;
+          }
         }
 
         for (const [id, sprite] of spriteMap) {
@@ -419,7 +422,8 @@ async function startGame() {
         const show = visible && !entity.dead && hp != null && max > 0 && hp > 0 && (idKey === 'playerId' || hp < max);
         if (!show) return g.setVisible(false);
 
-        const w = 50, h = 6;
+        // Sized to roughly the sprite's shoulder width; enemies get a slightly narrower bar.
+        const w = idKey === 'playerId' ? 32 : 28, h = 4;
         const bodyTop = sprite.cfg.bodyHeight != null ? sprite.cfg.bodyHeight * sprite.scaleY : sprite.displayHeight * sprite.originY;
         const top = entity.y - bodyTop - 12;
         const frac = Phaser.Math.Clamp(hp / max, 0, 1);
@@ -430,23 +434,6 @@ async function startGame() {
         g.setDepth(entity.y + 1).setVisible(true);
       }
 
-      // Displays a waiting overlay before the match starts.
-      showWaiting() {
-        if (this.waitingObjects?.length) return;
-        const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
-        this.waitingObjects = [
-          this.add.rectangle(w / 2, h / 2, w, h, 0x1a1a1a, 1).setDepth(9000),
-          this.add.text(w / 2, h / 2, 'Waiting for the match to start…', {
-            fontFamily: 'monospace', fontSize: '44px', color: '#ffffff', align: 'center', wordWrap: { width: w * 0.8 }
-          }).setOrigin(0.5).setDepth(9001)
-        ];
-      }
-
-      // Hides the waiting overlay.
-      hideWaiting() {
-        (this.waitingObjects || []).forEach(obj => obj.destroy());
-        this.waitingObjects = [];
-      }
     }
 
     // Phaser engine configuration settings.
