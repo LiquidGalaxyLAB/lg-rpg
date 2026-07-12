@@ -107,8 +107,9 @@ export function registerSocketHandlers() {
     socket.on(SOCKET_EVENTS.MOVE, (data = {}) => {
       const player = state.players.get(state.socketPlayers.get(socket.id));
       if (!player || player.dead) return;
-      player.velocityX = (data.dx || 0) * PLAYER_DEFAULTS.speed;
-      player.velocityY = (data.dy || 0) * PLAYER_DEFAULTS.speed;
+      const speed = PLAYER_DEFAULTS.speed;
+      player.velocityX = (data.dx || 0) * speed;
+      player.velocityY = (data.dy || 0) * speed;
     });
 
     // Triggers player combat actions and checks attack cooldowns.

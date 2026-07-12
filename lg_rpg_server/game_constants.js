@@ -58,9 +58,10 @@ export const PLAYER_SIZE = Object.freeze({
 export const PLAYER_DEFAULTS = Object.freeze({
   speed: 1.3,
   maxHealth: 100,
-  attackRange: 170, attackDamage: 12,
+  attackRange: 80, attackDamage: 15,
   attackCooldownMs: 350,
   actionSignalMs: 150,
+  knockbackSpeed: 3.5, knockbackMs: 200,
 });
 
 export const GAME_LOOP = Object.freeze({
@@ -116,18 +117,45 @@ export const ENEMY_MOVEMENT = Object.freeze({
 });
 
 export const ENEMY_COMBAT = Object.freeze({
-  health: 30, hitboxHalfWidth: 16, hitboxHeight: 32, hitboxOriginY: 1, attackRange: 38, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700,
+  health: 30, hitboxHalfWidth: 16, hitboxHeight: 32, hitboxOriginY: 1, attackRange: 38, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700, actionSignalMs: 150,
+  knockbackSpeed: 2.1, knockbackMs: 150, knockbackImmunityMs: 500,
+  attackWindupMs: 350,
 });
 
 // Stats for different zombie enemy types.
 export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   { type: 'skeleton' },
-  { type: 'goblin' },
-  { type: 'mushroom' },
+  {
+    type: 'goblin',
+    // Projectile-capable: ~rangedRatio of spawns become bomb throwers that keep distance; the rest melee.
+    throwRange: 260,
+    rangedRatio: 0.4,
+    projectile: {
+      sprite: 'enemy:goblin:proj:bomb',
+      speed: 5,
+      damage: 14,
+      splashRadius: 64,
+      explosionLingerMs: 450,
+      cooldownMs: 5000,
+    },
+  },
+  {
+    type: 'mushroom',
+    throwRange: 230,
+    rangedRatio: 0.4,
+    projectile: {
+      sprite: 'enemy:mushroom:proj:spore',
+      speed: 4,
+      damage: 10,
+      splashRadius: 44,
+      explosionLingerMs: 340,
+      cooldownMs: 5000,
+    },
+  },
   {
     type: 'rat',
     speed: 2.8,
-    health: 15,
+    health: 46,
     hitboxHalfWidth: 9,
     hitboxHeight: 16,
   },
@@ -141,7 +169,7 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   {
     type: 'bat',
     speed: 2.8,
-    health: 15,
+    health: 35,
     attackDamage: 5,
     hitboxHalfWidth: 14,
     hitboxHeight: 24,
@@ -150,10 +178,20 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   {
     type: 'flying_eye',
     speed: 2.6,
-    health: 20,
+    health: 36,
     hitboxHalfWidth: 16,
     hitboxHeight: 26,
     hitboxOriginY: 0.5,
+    throwRange: 280,
+    rangedRatio: 0.4,
+    projectile: {
+      sprite: 'enemy:flying_eye:proj:orb',
+      speed: 6,
+      damage: 10,
+      splashRadius: 40,
+      explosionLingerMs: 320,
+      cooldownMs: 5000,
+    },
   },
   {
     type: 'mimic',

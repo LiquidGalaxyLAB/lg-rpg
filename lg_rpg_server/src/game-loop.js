@@ -32,13 +32,16 @@ export function startGameLoop() {
             minY: PLAYER_SIZE.height,
             maxY: state.worldBounds.height,
           };
+      const moveNow = Date.now();
       for (const player of state.players.values()) {
         if (player.dead) continue;
+        // Hit knockback stacks on top of input, so controls stay live during the shove.
+        const knocked = player.knockbackUntil && moveNow < player.knockbackUntil;
         const moved = moveWithCollision(
           state.currentMap?.collision,
           player,
-          player.velocityX,
-          player.velocityY,
+          player.velocityX + (knocked ? player.knockbackVx : 0),
+          player.velocityY + (knocked ? player.knockbackVy : 0),
           bounds,
         );
         player.x = moved.x;
@@ -81,6 +84,15 @@ export function startGameLoop() {
             player.action = 'take_hit';
             player.actionExpiresAt = now + PLAYER_DEFAULTS.actionSignalMs;
           }
+          // Shove the player away from the attacker (no stun; input keeps working).
+          if (hit.sourceX != null) {
+            const dx = player.x - hit.sourceX;
+            const dy = player.y - hit.sourceY;
+            const len = Math.hypot(dx, dy) || 1;
+            player.knockbackVx = (dx / len) * PLAYER_DEFAULTS.knockbackSpeed;
+            player.knockbackVy = (dy / len) * PLAYER_DEFAULTS.knockbackSpeed;
+            player.knockbackUntil = now + PLAYER_DEFAULTS.knockbackMs;
+          }
         }
       }
 
@@ -122,18 +134,20 @@ export function startGameLoop() {
     // Broadcast the updated game state to all clients.
     const modePatch = state.activeMode ? state.activeMode.getStatePatch() : {};
     io.emit(SOCKET_EVENTS.GAME_STATE, {
-      players: Array.from(state.players.values()).map((p) => ({
-        playerId: p.playerId,
-        name: p.name,
-        x: p.x,
-        y: p.y,
-        hp: p.health,
-        maxHp: p.maxHealth,
-        kills: p.kills || 0,
-        dead: p.dead,
-        action: p.action || null,
-        team: p.team || null,
-      })),
+      players: Array.from(state.players.values()).map((p) => {
+        return {
+          playerId: p.playerId,
+          name: p.name,
+          x: p.x,
+          y: p.y,
+          hp: p.health,
+          maxHp: p.maxHealth,
+          kills: p.kills || 0,
+          dead: p.dead,
+          action: p.action || null,
+          team: p.team || null,
+        };
+      }),
       hearts: state.heartField ? state.heartField.list() : [],
       // durationMs = warmup + survive so the on-screen clock starts at the full winDurationMs.
       match: state.matchActive
