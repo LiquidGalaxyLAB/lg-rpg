@@ -12,7 +12,7 @@
         "flight":   { "path": "enemies/flying_eye/flight.png",   "frames": 8, "frameRate": 10, "repeat": -1 },
         "attack_1": { "path": "enemies/flying_eye/attack_1.png", "frames": 8, "frameRate": 12, "repeat": 0  },
         "attack_2": { "path": "enemies/flying_eye/attack_2.png", "frames": 8, "frameRate": 12, "repeat": 0  },
-        "attack_3": { "path": "enemies/flying_eye/attack_3.png", "frames": 6, "frameRate": 12, "repeat": 0  },
+        "throw":    { "path": "enemies/flying_eye/throw.png",    "frames": 6, "frameRate": 12, "repeat": 0  },
         "take_hit": { "path": "enemies/flying_eye/take_hit.png", "frames": 4, "frameRate": 8,  "repeat": 0  },
         "death":    { "path": "enemies/flying_eye/death.png",    "frames": 4, "frameRate": 8,  "repeat": 0  }
       },
@@ -20,7 +20,10 @@
         "orb": {
           "path": "enemies/flying_eye/projectile.png",
           "frame": { "width": 48, "height": 48 },
-          "frames": 8
+          "frames": 8,
+          "spinFrames": 4,
+          "spinFrameRate": 12,
+          "boomFrameRate": 12
         }
       }
     },
@@ -36,7 +39,7 @@
         "run":      { "path": "enemies/goblin/run.png",      "frames": 8,  "frameRate": 10, "repeat": -1 },
         "attack_1": { "path": "enemies/goblin/attack_1.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
         "attack_2": { "path": "enemies/goblin/attack_2.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
-        "attack_3": { "path": "enemies/goblin/attack_3.png", "frames": 12, "frameRate": 14, "repeat": 0  },
+        "throw":    { "path": "enemies/goblin/throw.png",    "frames": 12, "frameRate": 14, "repeat": 0  },
         "take_hit": { "path": "enemies/goblin/take_hit.png", "frames": 4,  "frameRate": 8,  "repeat": 0  },
         "death":    { "path": "enemies/goblin/death.png",    "frames": 4,  "frameRate": 8,  "repeat": 0  }
       },
@@ -44,7 +47,10 @@
         "bomb": {
           "path": "enemies/goblin/bomb.png",
           "frame": { "width": 100, "height": 100 },
-          "frames": 19
+          "frames": 19,
+          "spinFrames": 12,
+          "spinFrameRate": 16,
+          "boomFrameRate": 14
         }
       }
     },
@@ -60,7 +66,7 @@
         "run":      { "path": "enemies/mushroom/run.png",      "frames": 8,  "frameRate": 10, "repeat": -1 },
         "attack_1": { "path": "enemies/mushroom/attack_1.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
         "attack_2": { "path": "enemies/mushroom/attack_2.png", "frames": 8,  "frameRate": 12, "repeat": 0  },
-        "attack_3": { "path": "enemies/mushroom/attack_3.png", "frames": 11, "frameRate": 12, "repeat": 0  },
+        "throw":    { "path": "enemies/mushroom/throw.png",    "frames": 11, "frameRate": 12, "repeat": 0  },
         "take_hit": { "path": "enemies/mushroom/take_hit.png", "frames": 4,  "frameRate": 8,  "repeat": 0  },
         "death":    { "path": "enemies/mushroom/death.png",    "frames": 4,  "frameRate": 8,  "repeat": 0  }
       },
@@ -68,7 +74,10 @@
         "spore": {
           "path": "enemies/mushroom/projectile.png",
           "frame": { "width": 50, "height": 50 },
-          "frames": 8
+          "frames": 8,
+          "spinFrames": 5,
+          "spinFrameRate": 12,
+          "boomFrameRate": 12
         }
       }
     },
@@ -105,12 +114,12 @@
       "render": { "scale": 0.39, "origin": { "x": 0.5, "y": 0.66 } },
       "defaultAnimation": "fly",
       "animations": {
-        "fly":        { "path": "enemies/bat/fly.png",        "frames": 11, "frameRate": 12, "repeat": -1 },
-        "attack":     { "path": "enemies/bat/attack.png",     "frames": 11, "frameRate": 14, "repeat": 0  },
-        "fly_to_fall":{ "path": "enemies/bat/fly_to_fall.png","frames": 3,  "frameRate": 8,  "repeat": 0  },
-        "fall":       { "path": "enemies/bat/fall.png",       "frames": 5,  "frameRate": 8,  "repeat": 0  },
-        "hurt":       { "path": "enemies/bat/hurt.png",       "frames": 3,  "frameRate": 8,  "repeat": 0  },
-        "death":      { "path": "enemies/bat/death.png",      "frames": 4,  "frameRate": 8,  "repeat": 0  }
+        "fly":         { "path": "enemies/bat/fly.png",         "frames": 11, "frameRate": 12, "repeat": -1 },
+        "attack":      { "path": "enemies/bat/attack.png",      "frames": 11, "frameRate": 14, "repeat": 0  },
+        "fly_to_fall": { "path": "enemies/bat/fly_to_fall.png", "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "fall":        { "path": "enemies/bat/fall.png",        "frames": 5,  "frameRate": 8,  "repeat": 0  },
+        "hurt":        { "path": "enemies/bat/hurt.png",        "frames": 3,  "frameRate": 8,  "repeat": 0  },
+        "death":       { "path": "enemies/bat/death.png",       "frames": 4,  "frameRate": 8,  "repeat": 0  }
       }
     },
     "mimic": {
