@@ -25,6 +25,10 @@ function resolveStats(pick) {
     attackRange: pick.attackRange ?? ENEMY_COMBAT.attackRange,
     attackDamage: pick.attackDamage ?? ENEMY_COMBAT.attackDamage,
     attackCooldownMs: pick.attackCooldownMs ?? ENEMY_COMBAT.attackCooldownMs,
+    // Projectile fields for throw-capable types; rangedRatio is the fraction of spawns that become throwers.
+    projectile: pick.projectile ?? null,
+    throwRange: pick.throwRange ?? ENEMY_COMBAT.attackRange,
+    rangedRatio: pick.rangedRatio ?? 0.4,
   };
 }
 
@@ -66,7 +70,12 @@ function hitboxesWithinRange(a, b, range) {
 
 function damageEnemy(enemy, damage) {
   enemy.health -= damage;
-  if (enemy.health > 0) return false;
+  if (enemy.health > 0) {
+    // Signal a hit animation; kept until expiry so the broadcast picks it up.
+    enemy.action = 'take_hit';
+    enemy.actionExpiresAt = Date.now() + ENEMY_COMBAT.actionSignalMs;
+    return false;
+  }
 
   enemy.health = 0;
   enemy.dying = true;
@@ -82,7 +91,9 @@ export class ZombieMode {
     this.collision = map.collision;
     this.zones = map.zones.enemySpawn || [];
     this.enemies = new Map();
+    this.projectiles = new Map();
     this.nextId = 1;
+    this.nextProjectileId = 1;
     this.warmupTimer = null;
     this.spawnTimer = null;
     this.spawnStartedAt = 0;
@@ -134,6 +145,7 @@ export class ZombieMode {
     this.warmupTimer = null;
     this.spawnTimer = null;
     this.enemies.clear();
+    this.projectiles.clear();
   }
 
   // Spawns a random type of enemy at a clear map position.
@@ -173,10 +185,15 @@ export class ZombieMode {
       y: point.y,
       type: pick.type,
       stats,
+      // Per-instance role rolled at spawn, so a batch is a mix of throwers and melee.
+      isThrower: stats.projectile != null && Math.random() < stats.rangedRatio,
       targetId: null,
       health: stats.health,
       lastAttackAt: 0,
       action: null,
+      knockbackUntil: 0,
+      windupHitAt: 0,
+      windupKind: 'melee',
       dying: false,
       diedAt: 0,
     });
@@ -237,7 +254,11 @@ export class ZombieMode {
       }
     }
 
-    if (this.enemies.size === 0) return { playerDamage };
+    // Bombs already in the air keep flying and can explode even if every enemy dies.
+    if (this.enemies.size === 0) {
+      this.updateProjectiles(players, playerDamage, now);
+      return { playerDamage };
+    }
 
     // Prepare pathfinding for targets.
     this.pathfinder.prepare(players);
@@ -245,7 +266,42 @@ export class ZombieMode {
     for (const enemy of this.enemies.values()) {
       if (enemy.dying) continue;
 
-      enemy.action = null;
+      // Knocked-back enemies reel backward and can't chase or attack; the shove also interrupts any wind-up.
+      if (enemy.knockbackUntil && now < enemy.knockbackUntil) {
+        enemy.action = 'take_hit';
+        enemy.windupHitAt = 0;
+        this.moveEnemy(enemy, enemy.knockbackVx, enemy.knockbackVy);
+        continue;
+      }
+
+      // Preserve an active take_hit signal; clear anything else.
+      if (enemy.action !== 'take_hit' || now >= enemy.actionExpiresAt) {
+        enemy.action = null;
+      }
+
+      // Mid wind-up: hold position, then resolve — a melee swing lands only if the target is still in reach; a throw releases the bomb.
+      if (enemy.windupHitAt) {
+        const isThrow = enemy.windupKind === 'throw';
+        if (now < enemy.windupHitAt) {
+          enemy.action = isThrow ? 'throw' : 'attack';
+          continue;
+        }
+        enemy.windupHitAt = 0;
+        const target = players.find((p) => p.id === enemy.targetId);
+        if (isThrow) {
+          // The bomb lands on the target's spot at this instant, regardless of where they move next.
+          if (target) this.throwProjectile(enemy, target);
+        } else if (target && hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.attackRange)) {
+          playerDamage.push({
+            playerId: target.id,
+            amount: enemy.stats.attackDamage,
+            sourceX: enemy.x,
+            sourceY: enemy.y,
+            enemyId: enemy.id,
+          });
+        }
+        continue;
+      }
       this.updateTarget(enemy, players);
       if (enemy.targetId === null) continue;
 
@@ -255,18 +311,19 @@ export class ZombieMode {
         continue;
       }
 
-      if (
-        hitboxesWithinRange(
-          enemyHitbox(enemy),
-          target.hitbox,
-          enemy.stats.attackRange,
-        )
-      ) {
-        // Attack target player if the cooldown has elapsed.
-        if (now - enemy.lastAttackAt >= enemy.stats.attackCooldownMs) {
+      // A cornered thrower melees; at distance it throws. Melee instances only ever have the short reach.
+      const inMelee = hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.attackRange);
+      const canThrow = enemy.isThrower
+        && hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.throwRange);
+      if (inMelee || canThrow) {
+        // Throws use their own (slower) cooldown; melee swings use the base one.
+        const throwing = !inMelee && canThrow;
+        const cooldown = throwing ? enemy.stats.projectile.cooldownMs : enemy.stats.attackCooldownMs;
+        if (now - enemy.lastAttackAt >= cooldown) {
           enemy.lastAttackAt = now;
-          enemy.action = 'attack';
-          playerDamage.push({ playerId: target.id, amount: enemy.stats.attackDamage });
+          enemy.windupKind = throwing ? 'throw' : 'melee';
+          enemy.action = throwing ? 'throw' : 'attack';
+          enemy.windupHitAt = now + ENEMY_COMBAT.attackWindupMs;
         }
       } else {
         const dir = this.pathfinder.direction(enemy, target);
@@ -283,11 +340,84 @@ export class ZombieMode {
       this.moveEnemy(enemy, 0, 0);
     }
 
+    this.updateProjectiles(players, playerDamage, now);
+
     return { playerDamage };
   }
 
-  // Processes damage dealt by a player's attack to nearby enemies.
-  // `attacker` is unused here but keeps a uniform signature across modes.
+  // Launches a bomb toward the target's current position; the landing spot is fixed at release, so moving away dodges it.
+  throwProjectile(enemy, target) {
+    const cfg = enemy.stats.projectile;
+    const startX = enemy.x;
+    const startY = enemy.y - 20; // thrown from around hand height
+    // Aim from the actual release point so the trajectory passes exactly through the target.
+    const dx = target.x - startX;
+    const dy = target.y - startY;
+    const len = Math.hypot(dx, dy) || 1;
+    const id = `p${this.nextProjectileId++}`;
+    this.projectiles.set(id, {
+      id,
+      sprite: cfg.sprite,
+      x: startX,
+      y: startY,
+      targetX: target.x,
+      targetY: target.y,
+      vx: (dx / len) * cfg.speed,
+      vy: (dy / len) * cfg.speed,
+      damage: cfg.damage,
+      splashRadius: cfg.splashRadius,
+      explosionLingerMs: cfg.explosionLingerMs,
+      exploded: false,
+      removeAt: 0,
+      ownerId: enemy.id,
+    });
+  }
+
+  // Advances projectiles; on arrival they explode, splash-damage players in radius, then linger for the client's explosion anim.
+  updateProjectiles(players, playerDamage, now) {
+    for (const [id, proj] of this.projectiles) {
+      if (proj.exploded) {
+        if (now >= proj.removeAt) this.projectiles.delete(id);
+        continue;
+      }
+
+      const step = Math.hypot(proj.vx, proj.vy) || 1;
+      const reached = Math.hypot(proj.targetX - proj.x, proj.targetY - proj.y) <= step;
+      // Safety net: detonate at the map edge so nothing flies off forever.
+      const outOfBounds = proj.x < 0 || proj.y < 0
+        || proj.x > this.bounds.width || proj.y > this.bounds.height;
+
+      if (!reached && !outOfBounds) {
+        proj.x += proj.vx;
+        proj.y += proj.vy;
+        continue;
+      }
+
+      // Detonate at the landing spot (the aimed target, or wherever it stopped).
+      const blastX = reached ? proj.targetX : proj.x;
+      const blastY = reached ? proj.targetY : proj.y;
+      proj.x = blastX;
+      proj.y = blastY;
+      proj.exploded = true;
+      proj.removeAt = now + proj.explosionLingerMs;
+      const radiusSq = proj.splashRadius * proj.splashRadius;
+      for (const p of players) {
+        const pdx = p.x - blastX;
+        const pdy = p.y - blastY;
+        if (pdx * pdx + pdy * pdy <= radiusSq) {
+          playerDamage.push({
+            playerId: p.id,
+            amount: proj.damage,
+            sourceX: blastX,
+            sourceY: blastY,
+            enemyId: proj.ownerId,
+          });
+        }
+      }
+    }
+  }
+
+  // Processes damage dealt by a player's attack to nearby enemies. `attacker` is unused here but keeps a uniform signature across modes.
   playerAttack(attacker, hitbox, range, damage) {
     const attackerHitbox = hitbox;
     let hits = 0;
@@ -299,10 +429,31 @@ export class ZombieMode {
       if (!hitboxesWithinRange(attackerHitbox, enemyHitbox(enemy), range)) continue;
 
       hits++;
-      if (damageEnemy(enemy, damage)) kills++;
+      const now = Date.now();
+      if (damageEnemy(enemy, damage)) {
+        kills++;
+      } else if (now >= (enemy.knockbackImmuneUntil || 0)) {
+        // Knock the survivor away from the attacker, with brief immunity so rapid attacks can't stun-lock it.
+        const cx = (attackerHitbox.left + attackerHitbox.right) / 2;
+        const cy = (attackerHitbox.top + attackerHitbox.bottom) / 2;
+        const dx = enemy.x - cx;
+        const dy = enemy.y - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        enemy.knockbackVx = (dx / len) * ENEMY_COMBAT.knockbackSpeed;
+        enemy.knockbackVy = (dy / len) * ENEMY_COMBAT.knockbackSpeed;
+        enemy.knockbackUntil = now + ENEMY_COMBAT.knockbackMs;
+        enemy.knockbackImmuneUntil = now + ENEMY_COMBAT.knockbackMs + ENEMY_COMBAT.knockbackImmunityMs;
+      }
     }
 
     return { hit: hits > 0, killed: kills > 0, hits, kills };
+  }
+
+  // Applies damage to a specific enemy by id (used by the reflect shield to bounce an attack back at its source). Returns true if it killed the enemy.
+  damageEnemyById(id, amount) {
+    const enemy = this.enemies.get(id);
+    if (!enemy || enemy.dying) return false;
+    return damageEnemy(enemy, amount);
   }
 
   // Updates the player target that the enemy is currently chasing.
@@ -371,6 +522,13 @@ export class ZombieMode {
         action: e.action || null,
         hp: e.health,
         maxHp: e.stats.health,
+      })),
+      projectiles: Array.from(this.projectiles.values()).map((p) => ({
+        id: p.id,
+        sprite: p.sprite,
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+        exploded: p.exploded,
       })),
     };
   }
