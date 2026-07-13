@@ -106,6 +106,44 @@
         }
       }
     },
+    "dragon": {
+      "id": "dragon",
+      "displayName": "Dragon",
+      "textureKeyPrefix": "enemy:dragon",
+      "frame": {
+        "width": 70,
+        "height": 73
+      },
+      "render": {
+        "scale": 1.2,
+        "origin": {
+          "x": 0.5,
+          "y": 0.6
+        }
+      },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle": {
+          "path": "enemies/boss/dragon_idle.png",
+          "frames": 6,
+          "frameRate": 8,
+          "repeat": -1
+        }
+      },
+      "projectiles": {
+        "fire": {
+          "path": "enemies/boss/fire.png",
+          "frame": {
+            "width": 32,
+            "height": 32
+          },
+          "frames": 16,
+          "spinFrames": 5,
+          "spinFrameRate": 14,
+          "boomFrameRate": 18
+        }
+      }
+    },
     "bat": {
       "id": "bat",
       "displayName": "Bat",
