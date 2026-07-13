@@ -4,7 +4,7 @@ import { SOCKET_EVENTS } from './shared_constants.js';
 const socket = io();
 const $ = (id) => document.getElementById(id);
 
-const state = { connected: false, modeLabel: 'Zombie Raid', players: [], match: null, pvp: null, final: null, announcement: null };
+const state = { connected: false, modeLabel: 'Zombie Raid', players: [], match: null, pvp: null, final: null, announcement: null, boss: null };
 
 // Maps a PvP team id to its display colour name.
 const teamName = (t) => (t === 'teamA' ? 'Blue' : t === 'teamB' ? 'Red' : '—');
@@ -46,7 +46,9 @@ function renderResult() {
     }
     const won = state.final.outcome === 'win';
     panel.classList.add(won ? 'win' : 'lose');
-    $('clockLabel').textContent = won ? 'Squad Survived' : 'Defeated';
+    $('clockLabel').textContent = won
+      ? (state.final.reason === 'boss-defeated' ? 'Dragon Slain' : 'Squad Survived')
+      : 'Defeated';
     $('clockValue').textContent = won ? 'VICTORY' : 'GAME OVER';
     $('resultSub').textContent = `Survived ${formatClock(state.final.survivedMs)}`;
     return;
@@ -60,12 +62,30 @@ function renderResult() {
     return;
   }
   if (!state.match) {
-    $('clockLabel').textContent = 'Waiting';
-    $('clockValue').textContent = '0:00';
+    // Lobby / waiting state: show the roster fill instead of a dead 0:00 clock.
+    const n = state.players.length;
+    $('clockLabel').textContent = n === 0 ? 'Waiting for Players' : 'Lobby';
+    $('clockValue').textContent = `${n}/4`;
+    $('resultSub').textContent = n === 0
+      ? 'Join on your phone to enter the raid'
+      : 'Waiting for the host to start…';
     return;
   }
   const { elapsedMs = 0, warmupMs = 0, durationMs = 0 } = state.match;
   const inWarmup = warmupMs > 0 && elapsedMs < warmupMs;
+  // Past the survive mark the dragon boss is loose: swap the countdown for its health readout.
+  if (!inWarmup && durationMs > 0 && elapsedMs >= durationMs) {
+    $('clockLabel').textContent = 'Slay the Dragon';
+    if (state.boss) {
+      const pct = Math.max(0, Math.min(100, Math.round((state.boss.hp / (state.boss.maxHp || 1)) * 100)));
+      $('clockValue').textContent = `${pct}%`;
+      $('resultSub').textContent = 'Boss HP — kill it to win!';
+    } else {
+      $('clockValue').textContent = 'BOSS';
+      $('resultSub').textContent = 'The dragon approaches…';
+    }
+    return;
+  }
   $('clockLabel').textContent = inWarmup ? 'Enemies In' : 'Survive';
   $('clockValue').textContent = formatClock((inWarmup ? warmupMs : durationMs) - elapsedMs);
 }
@@ -79,7 +99,9 @@ function renderBoard() {
     $('rows').innerHTML = `<div class="empty-message">${escapeHtml(state.announcement || 'Waiting for players...')}</div>`;
     return;
   }
-  $('rows').innerHTML = rows.map((p, i) => {
+  // Announcements were only visible on an empty board; show them above the rows too.
+  const banner = state.announcement ? `<div class="empty-message">${escapeHtml(state.announcement)}</div>` : '';
+  $('rows').innerHTML = banner + rows.map((p, i) => {
     const hp = Number(p.hp), max = Number(p.maxHp || 100);
     const pct = Number.isFinite(hp) && max > 0 ? Math.max(0, Math.min(100, Math.round(hp / max * 100))) : 100;
     const label = p.dead ? 'Down' : Number.isFinite(hp) ? `${pct}% HP` : 'Ready';
@@ -114,8 +136,9 @@ function showAnnouncement(message, durationMs = 3500) {
 const MUSIC = {
   intro:    { src: 'assets/audio/intro.ogg',    loop: true,  vol: 0.40 },
   cave:     { src: 'assets/audio/cave.ogg',     loop: true,  vol: 0.40 },
-  success:  { src: 'assets/audio/success.wav',  loop: false, vol: 0.75 },
-  gameover: { src: 'assets/audio/gameOver.wav', loop: false, vol: 0.75 },
+  boss:     { src: 'assets/audio/boss_fight.ogg', loop: true,  vol: 0.45 },
+  success:  { src: 'assets/audio/success.wav',   loop: false, vol: 0.75 },
+  gameover: { src: 'assets/audio/game_over.wav', loop: false, vol: 0.75 },
 };
 const MUSIC_DUCK = 0.15; // Music volume multiplier while the cheerleader is speaking.
 const musicEls = {};
@@ -215,7 +238,8 @@ function updateMusicForState(p) {
   if (musicMode !== 'zombie' || !p.match) return;
   const m = p.match;
   const inWarmup = m.warmupMs > 0 && m.elapsedMs < m.warmupMs;
-  playMusic(inWarmup ? 'intro' : 'cave');
+  const inBoss = m.durationMs > 0 && m.elapsedMs >= m.durationMs;
+  playMusic(inWarmup ? 'intro' : inBoss ? 'boss' : 'cave');
 }
 
 // Cheerleader voice uses Web Audio decoded buffers (per-line `new Audio(dataURI)` distorted on the rig).
@@ -295,9 +319,9 @@ async function playNextLine() {
 socket.on('connect', () => { state.connected = true; socket.emit(SOCKET_EVENTS.REGISTER_CHEERLEADER_SCREEN); renderStatus(); });
 // On disconnect, keep the voice line already playing (it's buffered locally) but clear pending ones.
 socket.on('disconnect', () => { state.connected = false; speechQueue.length = 0; renderStatus(); });
-socket.on(SOCKET_EVENTS.UPDATE_LOBBY, (p = {}) => { if (!state.match && !state.final) { state.players = p.players || []; render(); } });
+socket.on(SOCKET_EVENTS.UPDATE_LOBBY, (p = {}) => { if (!state.match && !state.final) { state.players = p.players || []; if (p.selectedMode) state.modeLabel = titleCase(p.selectedMode); render(); } });
 socket.on(SOCKET_EVENTS.GAME_STARTED, (p = {}) => { stopCommentary(); state.final = null; state.pvp = null; state.modeLabel = titleCase(p.selectedMode || state.modeLabel); musicMode = p.selectedMode || musicMode; playMusic(musicMode === 'zombie' ? 'intro' : null); render(); });
-socket.on(SOCKET_EVENTS.GAME_STATE, (p = {}) => { state.players = p.players || []; state.match = p.match || null; state.pvp = p.pvp || null; updateMusicForState(p); render(); });
+socket.on(SOCKET_EVENTS.GAME_STATE, (p = {}) => { state.players = p.players || []; state.match = p.match || null; state.pvp = p.pvp || null; state.boss = (p.enemies || []).find((e) => e.type === 'dragon') || null; updateMusicForState(p); render(); });
 socket.on(SOCKET_EVENTS.GAME_OVER, (p = {}) => { state.final = p; state.match = null; state.pvp = null; if (musicMode === 'zombie') playMusic(p.outcome === 'win' ? 'success' : 'gameover'); render(); });
 socket.on(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, (p = {}) => p.message && showAnnouncement(p.message, p.durationMs));
 socket.on(SOCKET_EVENTS.CHEERLEADER_AUDIO, (p = {}) => {

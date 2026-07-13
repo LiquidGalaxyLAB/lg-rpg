@@ -289,14 +289,17 @@ async function startGame() {
           const localX = proj.x - this.cameraOffset;
           let sprite = this.projectileSprites.get(proj.id);
           if (!sprite) {
-            sprite = this.add.sprite(localX, proj.y, proj.sprite, 0).setScale(0.8).setDepth(proj.y + 40);
+            sprite = this.add.sprite(localX, proj.y, proj.sprite, 0).setScale(proj.scale ?? 0.8).setDepth(proj.y + 40);
             sprite.exploded = false;
+            // Point the bolt along its flight heading (art faces right at angle 0).
+            if (proj.angle != null) sprite.setRotation(proj.angle);
             sprite.play(`${proj.sprite}:spin`);
             this.projectileSprites.set(proj.id, sprite);
           }
           sprite.setPosition(localX, proj.y);
           if (proj.exploded && !sprite.exploded) {
             sprite.exploded = true;
+            sprite.setRotation(0); // blast plays upright, not tilted along the flight angle
             sprite.setDepth(100000); // blast draws over everything
             sprite.play(`${proj.sprite}:boom`);
             // Only the screen the blast lands on shakes, so a distant bomb doesn't rattle every screen.
@@ -427,9 +430,11 @@ async function startGame() {
         const bodyTop = sprite.cfg.bodyHeight != null ? sprite.cfg.bodyHeight * sprite.scaleY : sprite.displayHeight * sprite.originY;
         const top = entity.y - bodyTop - 12;
         const frac = Phaser.Math.Clamp(hp / max, 0, 1);
-        const color = frac > 0.5 ? 0x44dd44 : frac > 0.25 ? 0xffcc00 : 0xdd3333;
+        // Enemies always red; players go green with the low-HP warning stages kept.
+        const color = idKey !== 'playerId' ? 0xe0394c
+          : frac > 0.5 ? 0x5f7160 : frac > 0.25 ? 0xffcc00 : 0xdd3333;
 
-        g.fillStyle(0x000000, 0.6).fillRect(localX - w / 2 - 1, top - 1, w + 2, h + 2);
+        g.fillStyle(0x141b1b, 0.9).fillRect(localX - w / 2 - 1, top - 1, w + 2, h + 2);
         g.fillStyle(color, 1).fillRect(localX - w / 2, top, w * frac, h);
         g.setDepth(entity.y + 1).setVisible(true);
       }

@@ -23,7 +23,7 @@ export function startMatchState() {
 
 // Ends the match, stops active game elements, and sends results; result is null for co-op, set for PvP team modes.
 export function endMatch(reason = 'all-dead', result = null) {
-  const outcome = reason === 'timer-win' ? 'win' : 'loss';
+  const outcome = reason === 'timer-win' || reason === 'boss-defeated' ? 'win' : 'loss';
   state.matchActive = false;
   cancelEmptyGrace();
   if (state.activeMode) {
