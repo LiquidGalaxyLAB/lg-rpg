@@ -36,12 +36,14 @@ export function startGameLoop() {
       for (const player of state.players.values()) {
         if (player.dead) continue;
         // Hit knockback stacks on top of input, so controls stay live during the shove.
+        // It starts at full speed and fades linearly to zero, so the hit lands sharp but lets go fast.
         const knocked = player.knockbackUntil && moveNow < player.knockbackUntil;
+        const fade = knocked ? (player.knockbackUntil - moveNow) / PLAYER_DEFAULTS.knockbackMs : 0;
         const moved = moveWithCollision(
           state.currentMap?.collision,
           player,
-          player.velocityX + (knocked ? player.knockbackVx : 0),
-          player.velocityY + (knocked ? player.knockbackVy : 0),
+          player.velocityX + (knocked ? player.knockbackVx * fade : 0),
+          player.velocityY + (knocked ? player.knockbackVy * fade : 0),
           bounds,
         );
         player.x = moved.x;
@@ -85,13 +87,15 @@ export function startGameLoop() {
             player.actionExpiresAt = now + PLAYER_DEFAULTS.actionSignalMs;
           }
           // Shove the player away from the attacker (no stun; input keeps working).
-          if (hit.sourceX != null) {
+          // Rate-limited so a swarm landing hits back-to-back can't chain shoves into an endless slide.
+          if (hit.sourceX != null && now >= (player.knockbackCooldownUntil || 0)) {
             const dx = player.x - hit.sourceX;
             const dy = player.y - hit.sourceY;
             const len = Math.hypot(dx, dy) || 1;
             player.knockbackVx = (dx / len) * PLAYER_DEFAULTS.knockbackSpeed;
             player.knockbackVy = (dy / len) * PLAYER_DEFAULTS.knockbackSpeed;
             player.knockbackUntil = now + PLAYER_DEFAULTS.knockbackMs;
+            player.knockbackCooldownUntil = now + PLAYER_DEFAULTS.knockbackCooldownMs;
           }
         }
       }

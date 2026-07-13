@@ -61,7 +61,8 @@ export const PLAYER_DEFAULTS = Object.freeze({
   attackRange: 80, attackDamage: 15,
   attackCooldownMs: 350,
   actionSignalMs: 150,
-  knockbackSpeed: 3.5, knockbackMs: 200,
+
+  knockbackSpeed: 2.0, knockbackMs: 100, knockbackCooldownMs: 400,
 });
 
 export const GAME_LOOP = Object.freeze({
@@ -211,6 +212,7 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     speed: 1.4,
     health: 1000,
 
+    knockbackResist: true,
     flies: true,
     commitForLife: true,
     aggroRange: 1600,
