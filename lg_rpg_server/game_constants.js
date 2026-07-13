@@ -204,6 +204,33 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     hitboxHeight: 28,
     maxOnMap: 3,
   },
+  {
+
+    type: 'dragon',
+    bossOnly: true,
+    speed: 1.4,
+    health: 1000,
+
+    flies: true,
+    commitForLife: true,
+    aggroRange: 1600,
+    hitboxHalfWidth: 26,
+    hitboxHeight: 34,
+    hitboxOriginY: 0.6,
+    maxOnMap: 1,
+    throwRange: 350,
+    rangedRatio: 1,
+    projectile: {
+      // Firebolt: flies to the target's spot, then explodes with splash damage.
+      sprite: 'enemy:dragon:proj:fire',
+      scale: 2.2,
+      speed: 6,
+      damage: 20,
+      splashRadius: 70,
+      explosionLingerMs: 640,
+      cooldownMs: 2500,
+    },
+  },
 ]);
 
 export const ASSET_MANIFESTS = Object.freeze({

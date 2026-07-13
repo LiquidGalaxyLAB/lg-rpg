@@ -116,8 +116,19 @@ export function startGameLoop() {
         } else if (everyPlayerDead()) {
           endMatch('all-dead');
         } else if (matchElapsedMs() >= ENEMY_SPAWN.warmupMs + MATCH.winDurationMs) {
-          // Match = a warm-up/grace window (no enemies) followed by the survive timer.
-          endMatch('timer-win');
+          // At the survive mark the boss is summoned instead of ending; slaying it wins the match.
+          const result = state.activeMode.updateBoss?.();
+          if (result) {
+            endMatch(result.reason);
+          } else if (state.activeMode.bossSpawned && !state.activeMode.bossAnnounced) {
+            // One-time entrance: banner on the screens plus a cheerleader call-out.
+            state.activeMode.bossAnnounced = true;
+            io.emit(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, {
+              message: 'The dragon has awoken — slay it to win!',
+              durationMs: 6000,
+            });
+            emitGameEvent('boss_spawned', {});
+          }
         }
       }
     }

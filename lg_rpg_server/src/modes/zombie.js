@@ -18,6 +18,8 @@ function resolveStats(pick) {
     aggroRange: pick.aggroRange ?? ENEMY_MOVEMENT.aggroRange,
     leashMultiplier: pick.leashMultiplier ?? ENEMY_MOVEMENT.leashMultiplier,
     commitForLife: pick.commitForLife ?? ENEMY_MOVEMENT.commitForLife,
+    // Fliers skip the pathfinder/collision and drift straight through the world toward their target.
+    flies: pick.flies ?? false,
     health: pick.health ?? ENEMY_COMBAT.health,
     hitboxHalfWidth: pick.hitboxHalfWidth ?? ENEMY_COMBAT.hitboxHalfWidth,
     hitboxHeight: pick.hitboxHeight ?? ENEMY_COMBAT.hitboxHeight,
@@ -94,6 +96,10 @@ export class ZombieMode {
     this.projectiles = new Map();
     this.nextId = 1;
     this.nextProjectileId = 1;
+    // Boss fight: the dragon is summoned once at the survive mark; killing it wins the match.
+    this.bossSpawned = false;
+    this.bossAnnounced = false;
+    this.bossId = null;
     this.warmupTimer = null;
     this.spawnTimer = null;
     this.spawnStartedAt = 0;
@@ -148,18 +154,22 @@ export class ZombieMode {
     this.projectiles.clear();
   }
 
-  // Spawns a random type of enemy at a clear map position.
-  spawn() {
-    if (this.zones.length === 0 || this.enemies.size >= this.currentCap()) return;
+  // Spawns an enemy at a clear map position: a random type, or a forced type when given.
+  spawn(forcedType = null) {
+    // Forced spawns (the scripted boss) ignore the global wave cap; random waves respect it.
+    if (this.zones.length === 0) return null;
+    if (!forcedType && this.enemies.size >= this.currentCap()) return null;
 
     const occupied = Array.from(this.enemies.values());
     const available = ZOMBIE_ENEMY_TYPES.filter((t) => {
+      if (forcedType && t.type !== forcedType) return false;
+      if (!forcedType && t.bossOnly) return false;
       if (t.maxOnMap == null) return true;
       return occupied.filter((e) => e.type === t.type && !e.dying).length < t.maxOnMap;
     });
     if (available.length === 0) return;
 
-    const pick = available[Math.floor(Math.random() * available.length)];
+    const pick = forcedType ? available[0] : available[Math.floor(Math.random() * available.length)];
     const stats = resolveStats(pick);
     const point = findSpawnPoint(this.zones, occupied, {
       edgePadding: SPAWN.edgePadding,
@@ -197,6 +207,22 @@ export class ZombieMode {
       dying: false,
       diedAt: 0,
     });
+    return id;
+  }
+
+  // Summons the dragon once at the survive mark; returns a match-end result once it's slain, else null.
+  updateBoss() {
+    if (!this.bossSpawned) {
+      const id = this.spawn('dragon');
+      if (id) {
+        this.bossId = id;
+        this.bossSpawned = true;
+      }
+      return null; // just summoned (or the map was momentarily full) — fight is on
+    }
+    const boss = this.enemies.get(this.bossId);
+    if (!boss || boss.dying) return { reason: 'boss-defeated' };
+    return null;
   }
 
   moveEnemy(enemy, deltaX, deltaY) {
@@ -216,6 +242,12 @@ export class ZombieMode {
     );
     enemy.x = moved.x;
     enemy.y = moved.y;
+  }
+
+  // Straight-line move for fliers: ignores collision, only clamps to the world bounds.
+  moveFlying(enemy, deltaX, deltaY) {
+    enemy.x = Math.max(0, Math.min(this.bounds.width, enemy.x + deltaX));
+    enemy.y = Math.max(0, Math.min(this.bounds.height, enemy.y + deltaY));
   }
 
   // Nudges a wedged enemy sideways to slip free of wall corners or crowd pileups.
@@ -289,7 +321,7 @@ export class ZombieMode {
         enemy.windupHitAt = 0;
         const target = players.find((p) => p.id === enemy.targetId);
         if (isThrow) {
-          // The bomb lands on the target's spot at this instant, regardless of where they move next.
+          // The projectile lands on the target's spot at this instant, regardless of where they move next.
           if (target) this.throwProjectile(enemy, target);
         } else if (target && hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.attackRange)) {
           playerDamage.push({
@@ -325,6 +357,12 @@ export class ZombieMode {
           enemy.action = throwing ? 'throw' : 'attack';
           enemy.windupHitAt = now + ENEMY_COMBAT.attackWindupMs;
         }
+      } else if (enemy.stats.flies) {
+        // Straight vector to the target, through anything in the way.
+        const dx = target.x - enemy.x;
+        const dy = target.y - enemy.y;
+        const len = Math.hypot(dx, dy) || 1;
+        this.moveFlying(enemy, (dx / len) * enemy.stats.speed, (dy / len) * enemy.stats.speed);
       } else {
         const dir = this.pathfinder.direction(enemy, target);
         const beforeX = enemy.x;
@@ -337,6 +375,7 @@ export class ZombieMode {
     this.separate();
 
     for (const enemy of this.enemies.values()) {
+      if (enemy.stats.flies) continue; // fliers ignore collision entirely
       this.moveEnemy(enemy, 0, 0);
     }
 
@@ -358,12 +397,14 @@ export class ZombieMode {
     this.projectiles.set(id, {
       id,
       sprite: cfg.sprite,
+      scale: cfg.scale,
       x: startX,
       y: startY,
       targetX: target.x,
       targetY: target.y,
       vx: (dx / len) * cfg.speed,
       vy: (dy / len) * cfg.speed,
+      angle: Math.atan2(dy, dx), // flight heading, so the client can point the sprite where it's going
       damage: cfg.damage,
       splashRadius: cfg.splashRadius,
       explosionLingerMs: cfg.explosionLingerMs,
@@ -487,7 +528,7 @@ export class ZombieMode {
 
   // Pushes overlapping enemies apart so they do not stack.
   separate() {
-    const list = Array.from(this.enemies.values());
+    const list = Array.from(this.enemies.values()).filter((e) => !e.stats.flies);
     const radius = ENEMY_MOVEMENT.separationRadius;
     const strength = ENEMY_MOVEMENT.separationStrength;
     const radiusSq = radius * radius;
@@ -529,6 +570,8 @@ export class ZombieMode {
         x: Math.round(p.x),
         y: Math.round(p.y),
         exploded: p.exploded,
+        scale: p.scale,
+        angle: p.angle,
       })),
     };
   }
