@@ -20,6 +20,7 @@ function resolveStats(pick) {
     commitForLife: pick.commitForLife ?? ENEMY_MOVEMENT.commitForLife,
     // Fliers skip the pathfinder/collision and drift straight through the world toward their target.
     flies: pick.flies ?? false,
+    knockbackResist: pick.knockbackResist ?? false,
     health: pick.health ?? ENEMY_COMBAT.health,
     hitboxHalfWidth: pick.hitboxHalfWidth ?? ENEMY_COMBAT.hitboxHalfWidth,
     hitboxHeight: pick.hitboxHeight ?? ENEMY_COMBAT.hitboxHeight,
@@ -298,10 +299,11 @@ export class ZombieMode {
     for (const enemy of this.enemies.values()) {
       if (enemy.dying) continue;
 
-      // Knocked-back enemies reel backward and can't chase or attack; the shove also interrupts any wind-up.
+      // Knocked-back enemies reel backward and can't chase or start new attacks. An in-flight
+      // wind-up survives the shove: it resolves once the reel ends, and the range re-check there
+      // makes it whiff naturally if the shove pushed the enemy out of reach.
       if (enemy.knockbackUntil && now < enemy.knockbackUntil) {
         enemy.action = 'take_hit';
-        enemy.windupHitAt = 0;
         this.moveEnemy(enemy, enemy.knockbackVx, enemy.knockbackVy);
         continue;
       }
@@ -473,7 +475,7 @@ export class ZombieMode {
       const now = Date.now();
       if (damageEnemy(enemy, damage)) {
         kills++;
-      } else if (now >= (enemy.knockbackImmuneUntil || 0)) {
+      } else if (!enemy.stats.knockbackResist && now >= (enemy.knockbackImmuneUntil || 0)) {
         // Knock the survivor away from the attacker, with brief immunity so rapid attacks can't stun-lock it.
         const cx = (attackerHitbox.left + attackerHitbox.right) / 2;
         const cy = (attackerHitbox.top + attackerHitbox.bottom) / 2;
