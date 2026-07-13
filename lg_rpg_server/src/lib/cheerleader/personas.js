@@ -43,7 +43,9 @@ export function buildSummary(ctx = {}) {
     const phaseLine =
       ctx.phase === 'grace'
         ? `Warm-up: enemies arrive in ${ctx.graceRemaining}s (no combat yet)`
-        : `Survive time left: ${ctx.timeRemaining}s`;
+        : ctx.phase === 'boss'
+          ? 'Boss fight: the dragon has been summoned — slaying it wins the match'
+          : `Survive time left: ${ctx.timeRemaining}s`;
     stateLines = `${phaseLine}\nEnemies on map right now: ${ctx.enemyCount ?? 0}`;
   }
 
@@ -58,7 +60,7 @@ export function buildSummary(ctx = {}) {
 // Mode-specific ground rules so the AI never describes the wrong game.
 const ZOMBIE_FACTS =
   `- Mode: Zombie Mode — a co-op survival fight. After a 30-second warm-up, the squad must survive 3 minutes of combat.
-- Win = the survive timer reaches 0 with at least one player alive. Loss = every player hits 0 health first.
+- When the 3-minute survive timer hits 0, a dragon boss is summoned. Win = slay the dragon (the whole squad wins, including fallen players). Loss = every player hits 0 health first.
 - Enemies spawn continuously (starts up to 25 on the map, cap rises ~11 each minute). Kill one and another spawns — the horde never clears.
 - 1 to 4 players, all on the same side.`;
 

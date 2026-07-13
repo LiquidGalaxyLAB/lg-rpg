@@ -110,13 +110,14 @@ export function getCheerleaderContext() {
     };
   }
 
-  // Zombie: a warm-up/grace window (no enemies) then the survive timer.
+  // Zombie: a warm-up/grace window (no enemies), the survive timer, then the dragon boss fight.
   const elapsedMs = matchElapsedMs();
   const graceMs = ENEMY_SPAWN.warmupMs;
   const inGrace = elapsedMs < graceMs;
+  const inBoss = elapsedMs >= graceMs + MATCH.winDurationMs;
   return {
     ...base,
-    phase: inGrace ? 'grace' : 'survive',
+    phase: inGrace ? 'grace' : inBoss ? 'boss' : 'survive',
     graceRemaining: Math.max(0, Math.ceil((graceMs - elapsedMs) / 1000)),
     elapsedSeconds: Math.floor(Math.max(0, elapsedMs - graceMs) / 1000),
     timeRemaining: inGrace

@@ -97,6 +97,7 @@ const EVENT_MAPPERS = {
   kill: (d) => `${d.name} got a kill (${d.kills} total)`,
   player_low_health: (d) => `${d.name} is low on health (${d.hp} left)`,
   player_died: (d) => `${d.name} went down`,
+  boss_spawned: () => 'the dragon boss just appeared — slaying it wins the match',
   match_won: (d) => {
     if (!d.scores) return 'the squad survived and won the match';
     const score = `Blue ${d.scores.teamA ?? 0} - Red ${d.scores.teamB ?? 0}`;
