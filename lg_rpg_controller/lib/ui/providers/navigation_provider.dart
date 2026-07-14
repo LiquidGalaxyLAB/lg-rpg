@@ -7,6 +7,7 @@ abstract final class NavigationIndex {
   static const controller = 2;
   static const matchWaiting = 3;
   static const matchResult = 4;
+  static const lgTask = 5;
 }
 
 class NavigationNotifier extends StateNotifier<int> {
