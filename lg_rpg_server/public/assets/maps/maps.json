@@ -11,12 +11,12 @@
           "path": "maps/pvp/pvp_map_3_screen.tmj",
           "layers": {
             "ground": "base_layer",
-            "walk": "walk_layer"
+            "tree": "tree_layer",
+            "third": "third_layer"
           },
           "objectLayers": {
-            "teamASpawn": "team1_spwan",
+            "teamASpawn": "team1_spawn",
             "teamBSpawn": "team2_spawn",
-            "playerSpawn": "player_spawn",
             "captureZone": "capture_zone"
           },
           "tilesets": [
@@ -27,22 +27,34 @@
               "firstgid": 1
             },
             {
-              "name": "TilesetFloor",
-              "key": "tileset:pvp3:573:TilesetFloor",
-              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "name": "wall",
+              "key": "tileset:pvp3:573:wall",
+              "path": "maps/shared_assets/pvp/wall.png",
               "firstgid": 573
             },
             {
-              "name": "tileset_arranged",
-              "key": "tileset:pvp3:1145:tileset_arranged",
-              "path": "maps/shared_assets/pvp/robot_warfare/tileset_arranged.png",
-              "firstgid": 1145
+              "name": "TilesetNature",
+              "key": "tileset:pvp3:663:TilesetNature",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetNature.png",
+              "firstgid": 663
             },
             {
-              "name": "Building",
-              "key": "tileset:pvp3:1401:Building",
-              "path": "maps/shared_assets/pvp/metro_city/Building.png",
-              "firstgid": 1401
+              "name": "dungeontileset-extended",
+              "key": "tileset:pvp3:1167:dungeontileset_extended",
+              "path": "maps/shared_assets/dungeon/dungeontileset-extended.png",
+              "firstgid": 1167
+            },
+            {
+              "name": "TilesetDesert",
+              "key": "tileset:pvp3:5263:TilesetDesert",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetDesert.png",
+              "firstgid": 5263
+            },
+            {
+              "name": "TilesetHouse",
+              "key": "tileset:pvp3:5503:TilesetHouse",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetHouse.png",
+              "firstgid": 5503
             }
           ]
         },
@@ -50,11 +62,13 @@
           "key": "map:pvp:5",
           "path": "maps/pvp/pvp_map_5_screen.tmj",
           "layers": {
-            "ground": "base_layer"
+            "ground": "base_layer",
+            "grass": "grass_layer",
+            "tree": "tree_layer"
           },
           "objectLayers": {
-            "teamASpawn": "team1_spwan",
-            "teamBSpawn": "team2_spwan",
+            "teamASpawn": "team1_spawn",
+            "teamBSpawn": "team2_spawn",
             "captureZone": "capture_zone"
           },
           "tilesets": [
@@ -65,10 +79,34 @@
               "firstgid": 1
             },
             {
-              "name": "TilesetFloor",
-              "key": "tileset:pvp5:573:TilesetFloor",
-              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetFloor.png",
+              "name": "TilesetNature",
+              "key": "tileset:pvp5:573:TilesetNature",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetNature.png",
               "firstgid": 573
+            },
+            {
+              "name": "wall",
+              "key": "tileset:pvp5:1077:wall",
+              "path": "maps/shared_assets/pvp/wall.png",
+              "firstgid": 1077
+            },
+            {
+              "name": "dungeontileset-extended",
+              "key": "tileset:pvp5:1167:dungeontileset_extended",
+              "path": "maps/shared_assets/dungeon/dungeontileset-extended.png",
+              "firstgid": 1167
+            },
+            {
+              "name": "TilesetDesert",
+              "key": "tileset:pvp5:5263:TilesetDesert",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetDesert.png",
+              "firstgid": 5263
+            },
+            {
+              "name": "TilesetHouse",
+              "key": "tileset:pvp5:5503:TilesetHouse",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetHouse.png",
+              "firstgid": 5503
             }
           ]
         }
@@ -89,7 +127,8 @@
           },
           "objectLayers": {
             "playerSpawn": "player_spawn",
-            "enemySpawn": "enemy_spawn"
+            "enemySpawn": "enemy_spawn",
+            "bossSpawn": "boss_spawn"
           },
           "tilesets": [
             {
@@ -169,12 +208,6 @@
               "key": "tileset:zombie3:6276:TilesetVillageAbandoned",
               "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetVillageAbandoned.png",
               "firstgid": 6276
-            },
-            {
-              "name": "SpriteSheet16x16",
-              "key": "tileset:zombie3:6516:SpriteSheet16x16",
-              "path": "maps/shared_assets/ninja_adventure/animated/water_ripples/SpriteSheet16x16.png",
-              "firstgid": 6516
             }
           ]
         },
@@ -192,7 +225,8 @@
           },
           "objectLayers": {
             "playerSpawn": "player_spawn",
-            "enemySpawn": "enemy_spawn"
+            "enemySpawn": "enemy_spawn",
+            "bossSpawn": "boss_spawn"
           },
           "tilesets": [
             {
