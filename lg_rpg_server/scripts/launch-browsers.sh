@@ -3,7 +3,7 @@
 set -e
 
 TOTAL_SCREENS="${1:-3}"
-PORT="${2:-3000}"
+PORT="${2:-8111}"
 SERVER_IP="${3:-}"
 if [ -z "$SERVER_IP" ]; then
   SERVER_IP="10.42.6.1"
@@ -16,12 +16,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Launching browsers on LG displays | Screens: $TOTAL_SCREENS | IP: $SERVER_IP:$PORT"
 
-# Generate physical layout: odd screen ids descending, then even screen ids ascending.
+# Physical left-to-right layout (LG convention, matches the controller app):
+#   leftmost = floor(N/2)+2 ... N, then master 1 (centre), then 2 ... floor(N/2)+1 = rightmost.
+#   e.g. N=3 -> 3 1 2  (leftmost 3, rightmost 2); N=5 -> 4 5 1 2 3  (leftmost 4, rightmost 3).
+# The last element is always the rightmost screen, which gets the leaderboard below.
+HALF=$((TOTAL_SCREENS / 2))
 PHYSICAL_SCREENS=()
-for ((i=TOTAL_SCREENS; i>=1; i--)); do
-  ((i % 2 != 0)) && PHYSICAL_SCREENS+=("$i")
+for ((i=HALF+2; i<=TOTAL_SCREENS; i++)); do   # left block: leftmost -> centre
+  PHYSICAL_SCREENS+=("$i")
 done
-for ((i=2; i<=TOTAL_SCREENS; i+=2)); do
+PHYSICAL_SCREENS+=(1)                          # master / centre
+for ((i=2; i<=HALF+1; i++)); do                # right block: centre -> rightmost
   PHYSICAL_SCREENS+=("$i")
 done
 
