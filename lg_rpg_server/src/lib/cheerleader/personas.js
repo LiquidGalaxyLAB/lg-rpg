@@ -46,7 +46,7 @@ export function buildSummary(ctx = {}) {
         : ctx.phase === 'boss'
           ? 'Boss fight: the dragon has been summoned — slaying it wins the match'
           : `Survive time left: ${ctx.timeRemaining}s`;
-    stateLines = `${phaseLine}\nEnemies on map right now: ${ctx.enemyCount ?? 0}`;
+    stateLines = `${phaseLine}\nEnemies alive across the whole map: ${ctx.enemyCount ?? 0}`;
   }
 
   return (
@@ -72,7 +72,8 @@ const PVP_FACTS =
 
 const SHARED_FACTS =
   `- Player names, health, kills, scores, time, and enemy counts come ONLY from the MATCH STATE below. Never invent or change a name or number.
-- Only reference players listed in MATCH STATE; never imply extra players or a higher count than listed.`;
+- Only reference players listed in MATCH STATE; never imply extra players or a higher count than listed.
+- The enemy count is map-wide. Never claim those enemies surround or chase one specific player.`;
 
 // Builds the full GAME FACTS block for the active mode.
 function gameFacts(modeId) {
