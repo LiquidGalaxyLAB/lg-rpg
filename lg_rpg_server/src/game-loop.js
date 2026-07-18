@@ -4,6 +4,8 @@ import {
   MATCH,
   PLAYER_DEFAULTS,
   PLAYER_SIZE,
+  POWERUP_BLINK_MS,
+  POWERUP_BY_ID,
   SOCKET_EVENTS,
 } from '../game_constants.js';
 import { io } from './app.js';
@@ -35,8 +37,7 @@ export function startGameLoop() {
       const moveNow = Date.now();
       for (const player of state.players.values()) {
         if (player.dead) continue;
-        // Hit knockback stacks on top of input, so controls stay live during the shove.
-        // It starts at full speed and fades linearly to zero, so the hit lands sharp but lets go fast.
+        // Knockback stacks on input (controls stay live) and fades linearly to zero.
         const knocked = player.knockbackUntil && moveNow < player.knockbackUntil;
         const fade = knocked ? (player.knockbackUntil - moveNow) / PLAYER_DEFAULTS.knockbackMs : 0;
         const moved = moveWithCollision(
@@ -62,6 +63,26 @@ export function startGameLoop() {
       for (const hit of playerDamage || []) {
         const player = state.players.get(hit.playerId);
         if (!player || player.dead) continue;
+        // Reflect bounces damage back, amplified; bounced hits don't re-reflect.
+        if ((player.reflectUntil || 0) > now) {
+          if (!hit.bounced) {
+            const bounced = hit.amount * POWERUP_BY_ID.reflect.multiplier;
+            // Co-op: bounce at the enemy that hit us. PvP: bounce at the opposing player.
+            if (hit.enemyId && typeof state.activeMode.damageEnemyById === 'function') {
+              const killed = state.activeMode.damageEnemyById(hit.enemyId, bounced);
+              if (killed) {
+                player.kills = (player.kills || 0) + 1;
+                emitGameEvent('kill', { playerId: player.playerId, name: player.name, kills: player.kills });
+              }
+            } else if (hit.attackerId && typeof state.activeMode.damagePlayerById === 'function') {
+              // Kill for this bounce is awarded below, when it lands next tick.
+              state.activeMode.damagePlayerById(hit.attackerId, bounced, player.playerId);
+            }
+          }
+          continue;
+        }
+        // Shield: absorbs all enemy damage while active.
+        if ((player.shieldUntil || 0) > now) continue;
         player.health = Math.max(0, player.health - hit.amount);
         if (player.health === 0) {
           player.dead = true;
@@ -70,7 +91,14 @@ export function startGameLoop() {
           player.velocityX = 0;
           player.velocityY = 0;
           emitGameEvent('player_died', { playerId: player.playerId, name: player.name });
-          
+
+          // Credit at the moment health hits 0, so blocked hits can't inflate the score.
+          const killer = hit.attackerId ? state.players.get(hit.attackerId) : null;
+          if (killer && killer !== player) {
+            killer.kills = (killer.kills || 0) + 1;
+            emitGameEvent('kill', { playerId: killer.playerId, name: killer.name, kills: killer.kills });
+          }
+
           // Notify the dead player's controller.
           if (player.socketId) {
             io.to(player.socketId).emit(SOCKET_EVENTS.YOU_DIED, { playerId: player.playerId });
@@ -86,8 +114,7 @@ export function startGameLoop() {
             player.action = 'take_hit';
             player.actionExpiresAt = now + PLAYER_DEFAULTS.actionSignalMs;
           }
-          // Shove the player away from the attacker (no stun; input keeps working).
-          // Rate-limited so a swarm landing hits back-to-back can't chain shoves into an endless slide.
+          // Shove away from the attacker (no stun); rate-limited so swarms can't chain-slide it.
           if (hit.sourceX != null && now >= (player.knockbackCooldownUntil || 0)) {
             const dx = player.x - hit.sourceX;
             const dy = player.y - hit.sourceY;
@@ -150,6 +177,11 @@ export function startGameLoop() {
     const modePatch = state.activeMode ? state.activeMode.getStatePatch() : {};
     io.emit(SOCKET_EVENTS.GAME_STATE, {
       players: Array.from(state.players.values()).map((p) => {
+        // Buff visuals: `flag` shows the effect, `flagEnding` blinks it as it expires.
+        const boostMsLeft = (p.speedBoostUntil || 0) - nowMs;
+        const shieldMsLeft = (p.shieldUntil || 0) - nowMs;
+        const reflectMsLeft = (p.reflectUntil || 0) - nowMs;
+        const powerMsLeft = (p.powerUntil || 0) - nowMs;
         return {
           playerId: p.playerId,
           name: p.name,
@@ -161,6 +193,19 @@ export function startGameLoop() {
           dead: p.dead,
           action: p.action || null,
           team: p.team || null,
+          character: p.character || null,
+          // Aim pointer: rounded to keep the payload small.
+          facingX: Math.round((p.facingX ?? 1) * 100) / 100,
+          facingY: Math.round((p.facingY ?? 0) * 100) / 100,
+          // Power-up states for the screen FX (sparkles, bubbles, aura).
+          boost: boostMsLeft > 0,
+          boostEnding: boostMsLeft > 0 && boostMsLeft <= POWERUP_BLINK_MS,
+          shield: shieldMsLeft > 0,
+          shieldEnding: shieldMsLeft > 0 && shieldMsLeft <= POWERUP_BLINK_MS,
+          reflect: reflectMsLeft > 0,
+          reflectEnding: reflectMsLeft > 0 && reflectMsLeft <= POWERUP_BLINK_MS,
+          power: powerMsLeft > 0,
+          powerEnding: powerMsLeft > 0 && powerMsLeft <= POWERUP_BLINK_MS,
         };
       }),
       hearts: state.heartField ? state.heartField.list() : [],

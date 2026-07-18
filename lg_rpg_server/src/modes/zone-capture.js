@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { findSpawnPoint } from '../lib/spawn.js';
 import { hitboxesWithinRange } from '../lib/hitbox.js';
 import { playerHitbox } from '../players.js';
+import { PlayerProjectiles } from '../lib/player-projectiles.js';
 
 // Match phases: live -> finished. Teams spawn on opposite sides, so no lock/grace is needed.
 const PHASE = Object.freeze({ ACTIVE: 'active', ENDED: 'ended' });
@@ -47,6 +48,8 @@ export class ZoneCaptureMode {
     this.pendingDamage = [];
     this.respawnAt = new Map(); // playerId -> timestamp the player returns
     this.invulnUntil = new Map(); // playerId -> timestamp protection expires
+    this.playerShots = new PlayerProjectiles(map.bounds);
+    this.dots = new Map(); // playerId -> active poison stack
 
     this.startedAt = 0;
     this.roundEndsAt = 0;
@@ -103,6 +106,8 @@ export class ZoneCaptureMode {
     this.respawnAt.clear();
     this.invulnUntil.clear();
     this.pendingDamage = [];
+    this.playerShots.clear();
+    this.dots.clear();
   }
 
   // Advances respawns and zone control; returns queued PvP damage for the game loop.
@@ -110,10 +115,84 @@ export class ZoneCaptureMode {
     const now = Date.now();
     this.processRespawns(now);
     this.updateZoneControl();
+    this.updatePlayerShots(now);
+    this.updateDots(now);
 
     const playerDamage = this.pendingDamage;
     this.pendingDamage = [];
     return { playerDamage };
+  }
+
+  // Spawns a player-fired projectile; this mode's tick resolves it against opposing players.
+  firePlayerProjectile(player, cfg, dirX, dirY) {
+    if (this.phase !== PHASE.ACTIVE || !player || player.dead) return;
+    this.playerShots.spawn(player, cfg, dirX, dirY);
+  }
+
+  // Advances player shots. No friendly fire; just-respawned players are omitted so shots pass through.
+  updatePlayerShots(now) {
+    const targets = [];
+    for (const p of state.players.values()) {
+      if (p.dead) continue;
+      if ((this.invulnUntil.get(p.playerId) || 0) > now) continue;
+      targets.push({ id: p.playerId, team: p.team, hitbox: playerHitbox(p), player: p });
+    }
+    this.playerShots.tick(now, targets, (target, shot) => {
+      if (this.phase !== PHASE.ACTIVE) return;
+      this.queueShotDamage(target.player, shot.damage, shot);
+      if (shot.dot) {
+        // Poison: fresh hits refresh the stack rather than stacking multiple timers.
+        this.dots.set(target.id, {
+          ticksLeft: shot.dot.ticks,
+          intervalMs: shot.dot.intervalMs,
+          nextAt: now + shot.dot.intervalMs,
+          damage: shot.dot.damage,
+          ownerId: shot.ownerId,
+        });
+      }
+    });
+  }
+
+  // Ticks poison damage on afflicted players; death or respawn clears the stack.
+  updateDots(now) {
+    for (const [playerId, dot] of this.dots) {
+      const target = state.players.get(playerId);
+      if (!target || target.dead || this.phase !== PHASE.ACTIVE) {
+        this.dots.delete(playerId);
+        continue;
+      }
+      if (now < dot.nextAt) continue;
+      dot.nextAt = now + dot.intervalMs;
+      dot.ticksLeft -= 1;
+      this.queueShotDamage(target, dot.damage, { ownerId: dot.ownerId });
+      if (dot.ticksLeft <= 0) this.dots.delete(playerId);
+    }
+  }
+
+  // Queues projectile/poison damage; the game loop credits the kill when the damage lands.
+  queueShotDamage(target, amount, shot) {
+    this.pendingDamage.push({
+      playerId: target.playerId,
+      amount,
+      sourceX: shot.x ?? null,
+      sourceY: shot.y ?? null,
+      attackerId: shot.ownerId ?? null,
+    });
+  }
+
+  // Queues damage by player id for the reflect shield; flagged as bounced so it can't ping-pong.
+  damagePlayerById(playerId, amount, attackerId) {
+    const target = state.players.get(playerId);
+    if (!target || target.dead || this.phase !== PHASE.ACTIVE) return false;
+    this.pendingDamage.push({
+      playerId,
+      amount,
+      sourceX: null,
+      sourceY: null,
+      attackerId: attackerId ?? null,
+      bounced: true,
+    });
+    return true;
   }
 
   // Schedules respawns for downed players and revives them when due.
@@ -150,6 +229,7 @@ export class ZoneCaptureMode {
     player.velocityY = 0;
     player.lowHealthSignaled = false;
     this.invulnUntil.set(player.playerId, now + PVP.invulnMs);
+    this.dots.delete(player.playerId); // a fresh life starts clean of poison
 
     // Tell the respawned player's controller to return to the game controls.
     if (player.socketId) {
@@ -211,9 +291,7 @@ export class ZoneCaptureMode {
     }
 
     const now = Date.now();
-    const queuedByTarget = new Map();
     let hits = 0;
-    let kills = 0;
 
     for (const target of state.players.values()) {
       if (target === attacker || target.dead) continue;
@@ -222,14 +300,17 @@ export class ZoneCaptureMode {
       if (!hitboxesWithinRange(hitbox, playerHitbox(target), range)) continue;
 
       hits += 1;
-      const already = queuedByTarget.get(target.playerId) || 0;
-      const projected = target.health - already;
-      if (projected > 0 && projected - damage <= 0) kills += 1;
-      queuedByTarget.set(target.playerId, already + damage);
-      this.pendingDamage.push({ playerId: target.playerId, amount: damage });
+      this.pendingDamage.push({
+        playerId: target.playerId,
+        amount: damage,
+        sourceX: attacker.x,
+        sourceY: attacker.y,
+        attackerId: attacker.playerId,
+      });
     }
 
-    return { hit: hits > 0, killed: kills > 0, hits, kills };
+    // Kills are 0 on purpose: damage is queued, not applied; the game loop credits it when it lands.
+    return { hit: hits > 0, killed: false, hits, kills: 0 };
   }
 
   // Returns the round result when the timer expires or a whole team has left.
@@ -264,6 +345,7 @@ export class ZoneCaptureMode {
   // Returns the client-facing PvP state patch.
   getStatePatch() {
     return {
+      projectiles: this.playerShots.list(),
       pvp: {
         phase: this.phase,
         spawns: this.teamSpawns,
