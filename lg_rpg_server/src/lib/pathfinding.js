@@ -179,8 +179,7 @@ export function createPathfinder(world = {}) {
   const rows = Math.ceil(bounds.height / cellSize);
   const grid = buildGrid(collision, cols, rows, cellSize, agentRadius);
 
-  // We make one step-count map per target, then every enemy just rolls "downhill" on it.
-  // This costs one flood per player (not one search per enemy), so it scales to many enemies.
+  // One step-count map per target, enemies roll "downhill" — one flood per player, not per enemy.
   const fields = new Map(); // target id -> { srcX, srcY, dist: Int32Array, computedAt }
   const targetMap = new Map();
   const queue = new Int32Array(cols * rows); // shared BFS frontier (floods are sequential)

@@ -2,6 +2,19 @@
 import 'dotenv/config';
 
 export { SOCKET_EVENTS, GAME_VIEW, GAME_PHASES } from './public/shared_constants.js';
+export {
+  LOADOUT_SLOTS,
+  POWERUP_BLINK_MS,
+  POWERUP_CATALOG,
+  HEALTH_CATALOG,
+  CHARACTER_CATALOG,
+} from './public/shared_constants.js';
+
+import {
+  POWERUP_CATALOG,
+  HEALTH_CATALOG,
+  CHARACTER_CATALOG,
+} from './public/shared_constants.js';
 
 // Parses the environment variable whether it's a finite number or returns the fallback value.
 function readNumberEnv(name, fallback) {
@@ -44,7 +57,7 @@ export const VALID_GAME_MODES = Object.freeze(new Set(Object.values(GAME_MODES))
 
 // Server and network settings.
 export const SERVER_CONFIG = Object.freeze({
-  port: readPositiveIntegerEnv('PORT', 3000),
+  port: readPositiveIntegerEnv('PORT', 8111),
   totalScreens: readPositiveIntegerEnv('TOTAL_SCREENS', 3),
   maxPlayers: readPositiveIntegerEnv('MAX_PLAYERS', 4),
   corsOrigin: process.env.CORS_ORIGIN || '*',
@@ -64,6 +77,63 @@ export const PLAYER_DEFAULTS = Object.freeze({
 
   knockbackSpeed: 2.0, knockbackMs: 100, knockbackCooldownMs: 400,
 });
+
+// Ranged attacks keyed by the `kind` sent with PLAYER_ATTACK; sprites live under huntress.
+export const PLAYER_RANGED = Object.freeze({
+  // Input-to-release delay, timed to the huntress attack_1 draw frames (6 frames @ 12fps).
+  windupMs: 330,
+  attacks: Object.freeze({
+    // Tuned against the melee swing (15 dmg, 80px radius, 350ms); specials sit above it.
+    arrow: {
+      // Two-shots a basic 30hp zombie, same per-hit damage as the sword.
+      sprite: 'player:huntress:proj:arrow',
+      speed: 9, damage: 35, maxRange: 380, scale: 2, cooldownMs: 500, explosionLingerMs: 220,
+    },
+    fire: {
+      // Fire charge: detonates on the first enemy hit with splash damage — one-shots basic zombies.
+      sprite: 'player:huntress:proj:fire',
+      speed: 7, damage: 70, maxRange: 460, scale: 2, cooldownMs: 4000,
+      splashRadius: 60, explosionLingerMs: 500,
+    },
+    poison: {
+      // Acid shot: modest on impact but burns the target down over time (28 total).
+      sprite: 'player:huntress:proj:poison',
+      speed: 7, damage: 8, maxRange: 460, scale: 1.6, cooldownMs: 4000, explosionLingerMs: 420,
+      dot: { ticks: 5, intervalMs: 800, damage: 4 },
+    },
+    magic: {
+      // Magic bolt: pierces, damaging everything along its line once.
+      sprite: 'player:huntress:proj:magic',
+      speed: 10, damage: 50, maxRange: 460, scale: 1.8, cooldownMs: 3500,
+      pierce: true, explosionLingerMs: 320,
+    },
+    ghost: {
+      // Ghost orb: slow, curves toward the nearest target, small splash on impact.
+      sprite: 'player:huntress:proj:ghost',
+      speed: 4, damage: 50, maxRange: 600, scale: 1.6, cooldownMs: 5000,
+      splashRadius: 40, explosionLingerMs: 380,
+      homing: { turnRate: 0.09, acquireRange: 260 },
+    },
+  }),
+});
+
+// Per-character basic + specials, derived from the shared catalog so UI and validation never drift.
+export const CHARACTER_KITS = Object.freeze(Object.fromEntries(
+  CHARACTER_CATALOG.map((c) => [c.id, Object.freeze({
+    basic: c.basic.id,
+    specials: Object.freeze(c.specials.map((s) => s.id)),
+  })]),
+));
+
+// Set of valid character ids a player may pick from the controller.
+export const VALID_CHARACTERS = Object.freeze(new Set(CHARACTER_CATALOG.map((c) => c.id)));
+
+// The character everyone starts on until they pick one in the lobby.
+export const DEFAULT_CHARACTER = 'huntress';
+
+// Fast lookups for applying a loadout item's effect by id.
+export const POWERUP_BY_ID = Object.freeze(Object.fromEntries(POWERUP_CATALOG.map((p) => [p.id, p])));
+export const HEALTH_BY_ID = Object.freeze(Object.fromEntries(HEALTH_CATALOG.map((h) => [h.id, h])));
 
 export const GAME_LOOP = Object.freeze({
   tickRateMs: 1000 / 60,
