@@ -26,8 +26,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   /// Which browser action is in flight (`true` = launching), so only the tapped button shows a spinner.
   bool? _browserBusyOpen;
-  bool _isLogoBusy = false;
-  bool _isKmlBusy = false;
 
   /// Whether the fields have been seeded from the persisted profile yet.
   bool _fieldsInitialized = false;
@@ -144,30 +142,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _browserBusyOpen = null;
         });
       }
-    }
-  }
-
-  Future<void> _showLogo() async {
-    setState(() => _isLogoBusy = true);
-    try {
-      await ref.read(sendLogoUseCaseProvider).call();
-      _snack('Logo displayed');
-    } catch (e) {
-      _snack('Show logo failed: $e');
-    } finally {
-      if (mounted) setState(() => _isLogoBusy = false);
-    }
-  }
-
-  Future<void> _clearKml() async {
-    setState(() => _isKmlBusy = true);
-    try {
-      await ref.read(cleanKmlUseCaseProvider).call();
-      _snack('KML cleared');
-    } catch (e) {
-      _snack('Clear KML failed: $e');
-    } finally {
-      if (mounted) setState(() => _isKmlBusy = false);
     }
   }
 
@@ -321,22 +295,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     : null,
               ),
               const SizedBox(height: 26),
-              const SectionLabel('Logo & Overlay'),
+              const SectionLabel('Liquid Galaxy'),
               const SizedBox(height: 12),
               AppButton(
-                label: 'Show Logo',
-                icon: Icons.image_outlined,
+                label: 'LG Tasks',
+                icon: Icons.build_circle_outlined,
                 variant: AppButtonVariant.tonal,
-                loading: _isLogoBusy,
-                onPressed: (connected && !_isLogoBusy) ? _showLogo : null,
-              ),
-              const SizedBox(height: 12),
-              AppButton(
-                label: 'Clear KML',
-                icon: Icons.cleaning_services_outlined,
-                variant: AppButtonVariant.danger,
-                loading: _isKmlBusy,
-                onPressed: (connected && !_isKmlBusy) ? _clearKml : null,
+                onPressed: () => ref
+                    .read(navigationProvider.notifier)
+                    .setIndex(NavigationIndex.lgTask),
               ),
             ],
           ),

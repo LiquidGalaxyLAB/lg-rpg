@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
 import 'package:lg_rpg_controller/ui/pages/controller_page.dart';
 import 'package:lg_rpg_controller/ui/pages/home_page.dart';
+import 'package:lg_rpg_controller/ui/pages/lg_task.dart';
 import 'package:lg_rpg_controller/ui/pages/match_waiting_page.dart';
 import 'package:lg_rpg_controller/ui/pages/match_result_page.dart';
 import 'package:lg_rpg_controller/ui/pages/settings_page.dart';
@@ -19,6 +20,7 @@ class MainScreen extends ConsumerWidget {
     ControllerPage(),
     MatchWaitingPage(),
     MatchResultPage(),
+    LgTask(),
   ];
 
   @override

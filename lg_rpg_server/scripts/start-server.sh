@@ -5,7 +5,7 @@ export NVM_DIR="$HOME/.nvm"
 set -e
 
 TOTAL_SCREENS="${1:-3}"
-PORT="${2:-3000}"
+PORT="${2:-8111}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
