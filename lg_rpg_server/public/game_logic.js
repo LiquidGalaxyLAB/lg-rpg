@@ -2,7 +2,7 @@
 import { GAME_VIEW, GAME_PHASES, SOCKET_EVENTS } from './shared_constants.js';
 import { drawPvp, drawHearts, showWaiting, hideWaiting } from './scene/overlays.js';
 import { createWeather, updateWeather } from './scene/weather.js';
-import { deathBurst, spillShards, healPopup } from './scene/effects.js';
+import { deathBurst, spillShards, healPopup, sparkleBurst, updateShieldFx, updateAuraFx } from './scene/effects.js';
 
 // Parse the screen number parameter to determine this screen's role.
 const urlParams = new URLSearchParams(window.location.search);
@@ -79,6 +79,11 @@ async function startGame() {
         this.load.tilemapTiledJSON(mapConfig.key, `assets/${mapConfig.path}`);
         (mapConfig.tilesets || []).forEach(t => this.load.image(t.key, `assets/${t.path}`));
         this.load.spritesheet('heart', 'assets/items/heart.png', { frameWidth: 16, frameHeight: 16 });
+        // Power-up FX: speed sparkles, shield/reflect bubbles, and the damage aura.
+        this.load.spritesheet('fx:sparkle', 'assets/fx/boost_sparkles.png', { frameWidth: 53, frameHeight: 35 });
+        this.load.spritesheet('fx:shield', 'assets/fx/shield_bubble_blue.png', { frameWidth: 24, frameHeight: 26 });
+        this.load.spritesheet('fx:shield:reflect', 'assets/fx/shield_bubble_yellow.png', { frameWidth: 24, frameHeight: 26 });
+        this.load.spritesheet('fx:aura', 'assets/fx/heal_aura.png', { frameWidth: 25, frameHeight: 24 });
 
         if (configData.selectedMode === 'zombie') {
           this.load.spritesheet('rain', 'assets/fx/Rain.png', { frameWidth: 8, frameHeight: 8 });
@@ -94,6 +99,10 @@ async function startGame() {
           } else {
             this.load.spritesheet(p.textureKey, `assets/${p.assetPath}`, { frameWidth: p.frame.width, frameHeight: p.frame.height });
           }
+          Object.entries(p.projectiles || {}).forEach(([name, proj]) => {
+            this.load.spritesheet(`${playerAnimationPrefix(p)}:proj:${name}`, `assets/${proj.path}`,
+              { frameWidth: proj.frame.width, frameHeight: proj.frame.height });
+          });
         });
 
         if (enemiesManifest) {
@@ -139,6 +148,21 @@ async function startGame() {
           frames: this.anims.generateFrameNumbers('heart', { start: 0, end: 5 }),
           frameRate: 8, repeat: -1,
         });
+        this.anims.create({
+          key: 'fx:shield:spin',
+          frames: this.anims.generateFrameNumbers('fx:shield', { start: 0, end: 5 }),
+          frameRate: 10, repeat: -1,
+        });
+        this.anims.create({
+          key: 'fx:shield:reflect:spin',
+          frames: this.anims.generateFrameNumbers('fx:shield:reflect', { start: 0, end: 5 }),
+          frameRate: 10, repeat: -1,
+        });
+        this.anims.create({
+          key: 'fx:aura:pulse',
+          frames: this.anims.generateFrameNumbers('fx:aura', { start: 0, end: 4 }),
+          frameRate: 8, repeat: -1,
+        });
 
         socket.on(SOCKET_EVENTS.GAME_STATE, d => {
           this.serverPlayers = d.players || [];
@@ -174,6 +198,21 @@ async function startGame() {
               key: `${prefix}:${name}`,
               frames: this.anims.generateFrameNumbers(textureKey, frameRange),
               frameRate: anim.frameRate, repeat: anim.repeat,
+            });
+          });
+          // Split each projectile sheet at spinFrames into a looping "spin" (in flight) and a one-shot "boom" (impact).
+          Object.entries(def.projectiles || {}).forEach(([name, proj]) => {
+            const key = `${prefix}:proj:${name}`;
+            const spin = proj.spinFrames ?? proj.frames;
+            this.anims.create({
+              key: `${key}:spin`,
+              frames: this.anims.generateFrameNumbers(key, { start: 0, end: spin - 1 }),
+              frameRate: proj.spinFrameRate ?? 12, repeat: -1,
+            });
+            this.anims.create({
+              key: `${key}:boom`,
+              frames: this.anims.generateFrameNumbers(key, { start: spin, end: proj.frames - 1 }),
+              frameRate: proj.boomFrameRate ?? 12, repeat: 0,
             });
           });
         });
@@ -328,13 +367,23 @@ async function startGame() {
           activeIds.add(id);
           const localX = entity.x - this.cameraOffset;
 
+          // Skin the sprite is drawn with; a character switch keeps the same id, so cfg must resync.
+          const skin = entity.character ?? entity.type ?? null;
+
           let sprite = spriteMap.get(id);
           if (!sprite) {
             const cfg = resolve(entity);
             sprite = this.add.sprite(localX, entity.y, cfg.textureKey, 0).setOrigin(cfg.origin.x, cfg.origin.y).setScale(cfg.scale);
-            Object.assign(sprite, { cfg, wx: entity.x, wy: entity.y, still: 999, lockKey: null, lastAction: null, hpBar: this.add.graphics() });
+            Object.assign(sprite, { cfg, skin, wx: entity.x, wy: entity.y, still: 999, lockKey: null, lastAction: null, hpBar: this.add.graphics() });
             if (cfg.idleAnim) sprite.play(cfg.idleAnim);
             spriteMap.set(id, sprite);
+          } else if (sprite.skin !== skin) {
+            // Restyle in place so health bars, tints and effects carry over.
+            const cfg = resolve(entity);
+            sprite.off(Phaser.Animations.Events.ANIMATION_COMPLETE);
+            sprite.setTexture(cfg.textureKey, 0).setOrigin(cfg.origin.x, cfg.origin.y).setScale(cfg.scale);
+            Object.assign(sprite, { cfg, skin, lockKey: null, lastAction: null });
+            if (cfg.idleAnim) sprite.play(cfg.idleAnim);
           }
 
           const actions = sprite.cfg.actions;
@@ -392,6 +441,8 @@ async function startGame() {
             entity.dead ? 0x777777
               : this.time.now < (sprite.hurtTintUntil || 0) ? 0xd63b3b
               : this.time.now < (sprite.healTintUntil || 0) ? 0x5bffa0
+              : entity.boost ? 0x8fe3ff
+              : entity.power ? 0xff8fd0
               : 0xffffff,
           );
 
@@ -399,12 +450,21 @@ async function startGame() {
           sprite.setVisible(visible).setDepth(entity.y);
           this.drawHealthBar(sprite, entity, localX, visible, idKey);
           if (idKey === 'playerId') {
-            // Detect a heal (only hearts raise HP) and pop a green "+N" + flash. Guard against the respawn HP reset (was dead / HP was 0).
+            // Detect a heal (hearts or potions raise HP) and pop a green "+N" + flash. Guard against the respawn HP reset (was dead / HP was 0).
             if (sprite.lastHp != null && sprite.lastHp > 0 && !entity.dead && entity.hp > sprite.lastHp) {
               if (visible) healPopup(this, localX, entity.y);
               sprite.healTintUntil = this.time.now + 350;
             }
             sprite.lastHp = entity.hp;
+            // Speed boost: one sparkle burst on activation, plus the glow tint above.
+            if (entity.boost && !entity.dead) {
+              if (!sprite.boosted) { sprite.boosted = true; sparkleBurst(this, localX, entity.y, sprite, 16, -10); }
+            } else {
+              sprite.boosted = false;
+            }
+            // Shield/reflect bubble and the damage aura track the player each frame.
+            updateShieldFx(this, sprite, entity, localX, visible);
+            updateAuraFx(this, sprite, entity, localX, visible);
           }
         }
 
@@ -412,6 +472,8 @@ async function startGame() {
           if (!activeIds.has(id)) {
             sprite.off(Phaser.Animations.Events.ANIMATION_COMPLETE);
             sprite.hpBar.destroy();
+            if (sprite.shieldFx) sprite.shieldFx.destroy();
+            if (sprite.auraFx) sprite.auraFx.destroy();
             sprite.destroy();
             spriteMap.delete(id);
           }
