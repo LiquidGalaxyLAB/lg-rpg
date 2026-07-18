@@ -10,6 +10,9 @@ import {
 import { findSpawnPoint } from '../lib/spawn.js';
 import { canStandAt, moveWithCollision } from '../lib/collision.js';
 import { createPathfinder, distance, distanceSq } from '../lib/pathfinding.js';
+import { PlayerProjectiles } from '../lib/player-projectiles.js';
+import { state } from '../state.js';
+import { emitGameEvent } from '../cheerleader-bridge.js';
 
 // Combines default enemy stats with any type-specific overrides.
 function resolveStats(pick) {
@@ -95,6 +98,7 @@ export class ZombieMode {
     this.zones = map.zones.enemySpawn || [];
     this.enemies = new Map();
     this.projectiles = new Map();
+    this.playerShots = new PlayerProjectiles(map.bounds);
     this.nextId = 1;
     this.nextProjectileId = 1;
     // Boss fight: the dragon is summoned once at the survive mark; killing it wins the match.
@@ -153,6 +157,7 @@ export class ZombieMode {
     this.spawnTimer = null;
     this.enemies.clear();
     this.projectiles.clear();
+    this.playerShots.clear();
   }
 
   // Spawns an enemy at a clear map position: a random type, or a forced type when given.
@@ -287,9 +292,10 @@ export class ZombieMode {
       }
     }
 
-    // Bombs already in the air keep flying and can explode even if every enemy dies.
+    // Bombs and arrows already in the air keep flying even if every enemy dies.
     if (this.enemies.size === 0) {
       this.updateProjectiles(players, playerDamage, now);
+      this.updatePlayerShots(now);
       return { playerDamage };
     }
 
@@ -299,9 +305,7 @@ export class ZombieMode {
     for (const enemy of this.enemies.values()) {
       if (enemy.dying) continue;
 
-      // Knocked-back enemies reel backward and can't chase or start new attacks. An in-flight
-      // wind-up survives the shove: it resolves once the reel ends, and the range re-check there
-      // makes it whiff naturally if the shove pushed the enemy out of reach.
+      // Reeling enemies can't chase or start attacks; an in-flight wind-up resolves after the reel.
       if (enemy.knockbackUntil && now < enemy.knockbackUntil) {
         enemy.action = 'take_hit';
         this.moveEnemy(enemy, enemy.knockbackVx, enemy.knockbackVy);
@@ -382,8 +386,57 @@ export class ZombieMode {
     }
 
     this.updateProjectiles(players, playerDamage, now);
+    this.updateDots(now);
+    this.updatePlayerShots(now);
 
     return { playerDamage };
+  }
+
+  // Spawns a player-fired projectile; this mode's tick resolves its flight against enemies.
+  firePlayerProjectile(player, cfg, dirX, dirY) {
+    this.playerShots.spawn(player, cfg, dirX, dirY);
+  }
+
+  // Advances player arrows/specials against living enemies, crediting kills to the shooter.
+  updatePlayerShots(now) {
+    const targets = [];
+    for (const enemy of this.enemies.values()) {
+      if (enemy.dying) continue;
+      targets.push({ id: enemy.id, hitbox: enemyHitbox(enemy), enemy });
+    }
+    this.playerShots.tick(now, targets, (target, shot) => {
+      const enemy = target.enemy;
+      if (shot.dot) {
+        // Poison: fresh hits refresh the stack rather than stacking multiple timers.
+        enemy.dot = {
+          ticksLeft: shot.dot.ticks,
+          intervalMs: shot.dot.intervalMs,
+          nextAt: now + shot.dot.intervalMs,
+          damage: shot.dot.damage,
+          ownerId: shot.ownerId,
+        };
+      }
+      if (damageEnemy(enemy, shot.damage)) this.creditKill(shot.ownerId);
+    });
+  }
+
+  // Ticks poison damage on afflicted enemies.
+  updateDots(now) {
+    for (const enemy of this.enemies.values()) {
+      if (enemy.dying || !enemy.dot || now < enemy.dot.nextAt) continue;
+      enemy.dot.nextAt = now + enemy.dot.intervalMs;
+      enemy.dot.ticksLeft -= 1;
+      if (damageEnemy(enemy, enemy.dot.damage)) this.creditKill(enemy.dot.ownerId);
+      if (enemy.dot.ticksLeft <= 0) enemy.dot = null;
+    }
+  }
+
+  // Projectile and poison kills resolve after the attack event, so credit them here.
+  creditKill(ownerId) {
+    const owner = state.players.get(ownerId);
+    if (!owner) return;
+    owner.kills = (owner.kills || 0) + 1;
+    emitGameEvent('kill', { playerId: owner.playerId, name: owner.name, kills: owner.kills });
   }
 
   // Launches a bomb toward the target's current position; the landing spot is fixed at release, so moving away dodges it.
@@ -566,15 +619,19 @@ export class ZombieMode {
         hp: e.health,
         maxHp: e.stats.health,
       })),
-      projectiles: Array.from(this.projectiles.values()).map((p) => ({
-        id: p.id,
-        sprite: p.sprite,
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-        exploded: p.exploded,
-        scale: p.scale,
-        angle: p.angle,
-      })),
+      // Enemy bombs and player shots share the client's projectile pipeline (ids never collide: p* vs s*).
+      projectiles: [
+        ...Array.from(this.projectiles.values()).map((p) => ({
+          id: p.id,
+          sprite: p.sprite,
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+          exploded: p.exploded,
+          scale: p.scale,
+          angle: p.angle,
+        })),
+        ...this.playerShots.list(),
+      ],
     };
   }
 }

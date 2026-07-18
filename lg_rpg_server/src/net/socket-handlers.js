@@ -1,11 +1,18 @@
 import {
+  CHARACTER_KITS,
+  DEFAULT_CHARACTER,
   GAME_MODES,
   GAME_PHASES,
+  HEALTH_BY_ID,
+  LOADOUT_SLOTS,
   PLAYER_DEFAULTS,
+  PLAYER_RANGED,
+  POWERUP_BY_ID,
   PVP,
   PVP_TEAMS,
   SERVER_CONFIG,
   SOCKET_EVENTS,
+  VALID_CHARACTERS,
   VALID_GAME_MODES,
 } from '../../game_constants.js';
 import { io } from '../app.js';
@@ -89,6 +96,15 @@ export function registerSocketHandlers() {
         kills: existing?.kills ?? 0,
         lastAttackAt: existing?.lastAttackAt ?? 0,
         team: existing?.team ?? null,
+        // Chosen character (its specials load free); defaults until the player picks one.
+        character: existing?.character ?? DEFAULT_CHARACTER,
+        // Power-up/health item ids equipped into the loadout slots, and their per-id cooldowns.
+        loadout: existing?.loadout ?? [],
+        powerupCooldowns: existing?.powerupCooldowns ?? {},
+        // Last movement direction, so ranged shots fire where the player faces.
+        facingX: existing?.facingX ?? 1,
+        facingY: existing?.facingY ?? 0,
+        rangedCooldowns: existing?.rangedCooldowns ?? {},
       };
 
       // Clean up the old socket mapping if the player rejoins on a new socket.
@@ -107,23 +123,76 @@ export function registerSocketHandlers() {
     socket.on(SOCKET_EVENTS.MOVE, (data = {}) => {
       const player = state.players.get(state.socketPlayers.get(socket.id));
       if (!player || player.dead) return;
-      const speed = PLAYER_DEFAULTS.speed;
+      // Bake the speed boost into velocity here so the sprint starts and ends responsively.
+      const boosted = (player.speedBoostUntil || 0) > Date.now();
+      const speed = PLAYER_DEFAULTS.speed * (boosted ? POWERUP_BY_ID.speed.multiplier : 1);
       player.velocityX = (data.dx || 0) * speed;
       player.velocityY = (data.dy || 0) * speed;
+      // Facing aims the next shot: twin-stick aim if sent, else movement dir; released keeps last.
+      if (data.ax || data.ay) {
+        const len = Math.hypot(data.ax || 0, data.ay || 0) || 1;
+        player.facingX = (data.ax || 0) / len;
+        player.facingY = (data.ay || 0) / len;
+      } else if (data.dx || data.dy) {
+        const len = Math.hypot(data.dx || 0, data.dy || 0) || 1;
+        player.facingX = (data.dx || 0) / len;
+        player.facingY = (data.dy || 0) / len;
+      }
     });
 
-    // Triggers player combat actions and checks attack cooldowns.
-    socket.on(SOCKET_EVENTS.PLAYER_ATTACK, () => {
+    // Triggers attacks: payload.kind picks a special, validated against the character's kit.
+    socket.on(SOCKET_EVENTS.PLAYER_ATTACK, (payload = {}) => {
       const playerId = state.socketPlayers.get(socket.id);
       const player = state.players.get(playerId);
       if (!player || player.dead || !state.activeMode || typeof state.activeMode.playerAttack !== 'function') return;
 
-      // Enforce the attack cooldown.
+      const kit = CHARACTER_KITS[player.character];
+      const kind = typeof payload?.kind === 'string' && kit?.specials.includes(payload.kind)
+        ? payload.kind
+        : kit?.basic;
+      const ranged = kind ? PLAYER_RANGED.attacks[kind] : null;
+
+      // Enforce the shared attack cooldown, plus the per-kind one for ranged shots.
       const now = Date.now();
       if (now - (player.lastAttackAt || 0) < PLAYER_DEFAULTS.attackCooldownMs) return;
+      if (ranged) {
+        player.rangedCooldowns = player.rangedCooldowns || {};
+        if (now - (player.rangedCooldowns[kind] || 0) < ranged.cooldownMs) return;
+      }
       player.lastAttackAt = now;
 
       player.action = 'attack';
+
+      // Damage power-up doubles outgoing damage — projectiles and melee alike.
+      const powered = (player.powerUntil || 0) > now;
+      const dmgMult = powered ? POWERUP_BY_ID.power.multiplier : 1;
+
+      if (ranged && typeof state.activeMode.firePlayerProjectile === 'function') {
+        player.rangedCooldowns[kind] = now;
+        // Clone the config with boosted damage so the projectile carries it via cfg.damage/dot.
+        const shotCfg = dmgMult === 1 ? ranged : {
+          ...ranged,
+          damage: ranged.damage * dmgMult,
+          dot: ranged.dot ? { ...ranged.dot, damage: ranged.dot.damage * dmgMult } : ranged.dot,
+        };
+        // Hold the attack pose through the draw, then loose the shot on the release frame.
+        player.actionExpiresAt = now + PLAYER_RANGED.windupMs + PLAYER_DEFAULTS.actionSignalMs;
+        const mode = state.activeMode;
+        // Twin-stick aim: an explicit aim vector from the controller beats the movement facing.
+        const aimX = Number(payload?.aimX);
+        const aimY = Number(payload?.aimY);
+        const aimLen = Math.hypot(aimX, aimY);
+        const hasAim = Number.isFinite(aimX) && Number.isFinite(aimY) && aimLen > 0.01;
+        const dirX = hasAim ? aimX / aimLen : player.facingX || 1;
+        const dirY = hasAim ? aimY / aimLen : player.facingY || 0;
+        setTimeout(() => {
+          // The match may have ended or the player died/left during the draw.
+          if (state.activeMode !== mode || player.dead || state.players.get(playerId) !== player) return;
+          mode.firePlayerProjectile(player, shotCfg, dirX, dirY);
+        }, PLAYER_RANGED.windupMs);
+        return;
+      }
+
       player.actionExpiresAt = now + PLAYER_DEFAULTS.actionSignalMs;
 
       // Execute attack through the active game mode simulation.
@@ -131,13 +200,70 @@ export function registerSocketHandlers() {
         player,
         playerHitbox(player),
         PLAYER_DEFAULTS.attackRange,
-        PLAYER_DEFAULTS.attackDamage,
+        PLAYER_DEFAULTS.attackDamage * dmgMult,
       );
       const killCount = Number.isFinite(result?.kills) ? result.kills : result?.killed ? 1 : 0;
       if (killCount > 0) {
         player.kills = (player.kills || 0) + killCount;
         emitGameEvent('kill', { playerId: player.playerId, name: player.name, kills: player.kills });
       }
+    });
+
+    // Activates a loadout item (buff or potion); must be equipped and off cooldown.
+    socket.on(SOCKET_EVENTS.ACTIVATE_POWERUP, (data = {}) => {
+      const player = state.players.get(state.socketPlayers.get(socket.id));
+      if (!player || player.dead) return;
+      const type = String(data.type || '');
+      if (!Array.isArray(player.loadout) || !player.loadout.includes(type)) return;
+
+      const powerup = POWERUP_BY_ID[type];
+      const health = HEALTH_BY_ID[type];
+      if (!powerup && !health) return;
+
+      const now = Date.now();
+      const cooldownMs = powerup?.cooldownMs ?? health?.cooldownMs ?? 0;
+      player.powerupCooldowns = player.powerupCooldowns || {};
+      if (now - (player.powerupCooldowns[type] || 0) < cooldownMs) return;
+
+      if (powerup) {
+        // Each buff writes an absolute expiry the game loop and MOVE handler read.
+        if (type === 'speed') player.speedBoostUntil = now + powerup.durationMs;
+        else if (type === 'shield') player.shieldUntil = now + powerup.durationMs;
+        else if (type === 'reflect') player.reflectUntil = now + powerup.durationMs;
+        else if (type === 'power') player.powerUntil = now + powerup.durationMs;
+      } else {
+        player.health = Math.min(player.maxHealth, player.health + health.heal);
+        if (player.health > player.maxHealth * 0.3) player.lowHealthSignaled = false;
+      }
+      player.powerupCooldowns[type] = now;
+    });
+
+    // Lets a player pick their character from the lobby (its specials load free).
+    socket.on(SOCKET_EVENTS.SELECT_CHARACTER, (data = {}) => {
+      const player = state.players.get(state.socketPlayers.get(socket.id));
+      if (!player) return;
+      if (state.phase === GAME_PHASES.PLAYING) return;
+      const character = String(data.character || '');
+      if (!VALID_CHARACTERS.has(character)) return;
+      player.character = character;
+      broadcastLobby();
+    });
+
+    // Sets the player's equipped loadout — up to LOADOUT_SLOTS unique valid item ids.
+    socket.on(SOCKET_EVENTS.SET_LOADOUT, (data = {}) => {
+      const player = state.players.get(state.socketPlayers.get(socket.id));
+      if (!player) return;
+      if (state.phase === GAME_PHASES.PLAYING) return;
+      const items = Array.isArray(data.items) ? data.items : [];
+      const valid = [];
+      for (const raw of items) {
+        const id = String(raw);
+        if (!POWERUP_BY_ID[id] && !HEALTH_BY_ID[id]) continue;
+        if (valid.includes(id)) continue;
+        valid.push(id);
+        if (valid.length >= LOADOUT_SLOTS) break;
+      }
+      player.loadout = valid;
     });
 
     // Allows the host to change the game mode from the lobby.
