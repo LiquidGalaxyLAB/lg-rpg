@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "defaultPlayer": "water_priestess",
+  "defaultPlayer": "huntress",
   "players": {
     "water_priestess": {
       "id": "water_priestess",
@@ -159,6 +159,116 @@
           },
           "frameRate": 12,
           "repeat": 0
+        }
+      }
+    }
+  },
+  "animationSheetPlayers": {
+    "huntress": {
+      "id": "huntress",
+      "displayName": "Huntress",
+      "assetMode": "animationSheets",
+      "textureKeyPrefix": "player:huntress",
+      "frame": {
+        "width": 100,
+        "height": 100
+      },
+      "render": {
+        "scale": 0.95,
+        "origin": {
+          "x": 0.5,
+          "y": 0.67
+        },
+        "bodyHeight": 42
+      },
+      "defaultAnimation": "idle",
+      "animations": {
+        "idle": {
+          "path": "players/huntress/idle.png",
+          "frames": 10,
+          "frameRate": 8,
+          "repeat": -1
+        },
+        "walk": {
+          "path": "players/huntress/run.png",
+          "frames": 8,
+          "frameRate": 10,
+          "repeat": -1
+        },
+        "attack_1": {
+          "path": "players/huntress/attack_1.png",
+          "frames": 6,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "take_hit": {
+          "path": "players/huntress/take_hit.png",
+          "frames": 3,
+          "frameRate": 8,
+          "repeat": 0
+        },
+        "death": {
+          "path": "players/huntress/death.png",
+          "frames": 10,
+          "frameRate": 10,
+          "repeat": 0
+        }
+      },
+      "projectiles": {
+        "arrow": {
+          "path": "players/huntress/proj_arrow.png",
+          "frame": {
+            "width": 24,
+            "height": 24
+          },
+          "frames": 6,
+          "spinFrames": 2,
+          "spinFrameRate": 12,
+          "boomFrameRate": 16
+        },
+        "fire": {
+          "path": "players/huntress/proj_fire.png",
+          "frame": {
+            "width": 52,
+            "height": 52
+          },
+          "frames": 9,
+          "spinFrames": 4,
+          "spinFrameRate": 12,
+          "boomFrameRate": 12
+        },
+        "poison": {
+          "path": "players/huntress/proj_poison.png",
+          "frame": {
+            "width": 48,
+            "height": 48
+          },
+          "frames": 10,
+          "spinFrames": 6,
+          "spinFrameRate": 12,
+          "boomFrameRate": 12
+        },
+        "magic": {
+          "path": "players/huntress/proj_magic.png",
+          "frame": {
+            "width": 32,
+            "height": 32
+          },
+          "frames": 8,
+          "spinFrames": 4,
+          "spinFrameRate": 12,
+          "boomFrameRate": 12
+        },
+        "ghost": {
+          "path": "players/huntress/proj_ghost.png",
+          "frame": {
+            "width": 48,
+            "height": 48
+          },
+          "frames": 8,
+          "spinFrames": 6,
+          "spinFrameRate": 12,
+          "boomFrameRate": 10
         }
       }
     }
