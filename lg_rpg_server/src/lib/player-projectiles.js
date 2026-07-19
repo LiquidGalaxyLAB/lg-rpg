@@ -1,7 +1,11 @@
 // Player-fired projectiles: straight/homing, piercing, splash. Each mode supplies targets + onHit.
 
+import { PLAYER_RANGED } from '../../game_constants.js';
+
 // Extra reach around a target's hitbox so a fast shot can't skim past a thin edge.
 const HIT_PAD = 6;
+
+const ASSIST_COS = Math.cos((PLAYER_RANGED.aimAssist.maxAngleDeg * Math.PI) / 180);
 
 export class PlayerProjectiles {
   constructor(bounds) {
@@ -15,8 +19,10 @@ export class PlayerProjectiles {
   }
 
   // Launches a shot from the owner's bow height along a unit direction vector.
-  spawn(owner, cfg, dirX, dirY) {
+
+  spawn(owner, cfg, dirX, dirY, targets = null) {
     const id = `s${this.nextId++}`;
+    if (targets) ({ dirX, dirY } = this.assistAim(owner, cfg, dirX, dirY, targets));
     this.shots.set(id, {
       id,
       ownerId: owner.playerId,
@@ -74,6 +80,31 @@ export class PlayerProjectiles {
         this.detonate(shot, targets, onHit, now);
       }
     }
+  }
+
+
+  assistAim(owner, cfg, dirX, dirY, targets) {
+    const originX = owner.x + dirX * 16;
+    const originY = owner.y - 24 + dirY * 16;
+    const rangeSq = cfg.maxRange * cfg.maxRange;
+    let bestCos = ASSIST_COS;
+    let best = null;
+    for (const target of targets) {
+      // Reuse the flight-time filter so assist never locks onto the shooter or a teammate.
+      if (!this.canHit({ hitIds: new Set(), ownerId: owner.playerId, ownerTeam: owner.team ?? null }, target)) continue;
+      const hb = target.hitbox;
+      const dx = (hb.left + hb.right) / 2 - originX;
+      const dy = (hb.top + hb.bottom) / 2 - originY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > rangeSq || distSq === 0) continue;
+      // dot product of the two unit vectors == cos(angle between them); bigger == closer to the aim.
+      const cos = (dx * dirX + dy * dirY) / Math.sqrt(distSq);
+      if (cos > bestCos) {
+        bestCos = cos;
+        best = { dirX: dx / Math.sqrt(distSq), dirY: dy / Math.sqrt(distSq) };
+      }
+    }
+    return best || { dirX, dirY };
   }
 
   canHit(shot, target) {
