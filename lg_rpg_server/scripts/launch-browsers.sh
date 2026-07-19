@@ -5,6 +5,8 @@ set -e
 TOTAL_SCREENS="${1:-3}"
 PORT="${2:-8111}"
 SERVER_IP="${3:-}"
+# Slave SSH password; the controller passes the one from its Settings page.
+SSH_PASSWORD="${4:-lg}"
 if [ -z "$SERVER_IP" ]; then
   SERVER_IP="10.42.6.1"
   echo "Warning: no server IP given; defaulting to ${SERVER_IP}. If screens stay blank, pass the master's IP as the 3rd argument."
@@ -61,7 +63,7 @@ for idx in "${!PHYSICAL_SCREENS[@]}"; do
   else
     SLAVE="lg${host_id}"
     echo "Launching $LABEL on $SLAVE via SSH (position $pos): $URL"
-    sshpass -p 'lg' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "lg@${SLAVE}" "$BROWSER_CMD" 2>/dev/null || \
+    sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "lg@${SLAVE}" "$BROWSER_CMD" 2>/dev/null || \
       echo "Could not SSH to $SLAVE. Please open manually: $URL"
   fi
 done
