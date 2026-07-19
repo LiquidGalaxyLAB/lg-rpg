@@ -80,10 +80,15 @@ class MockISshService extends _i1.Mock implements _i2.ISshService {
       ) as _i3.Future<void>);
 
   @override
-  _i3.Future<String?> execute(String? cmd) => (super.noSuchMethod(
+  _i3.Future<String?> execute(
+    String? cmd, {
+    Duration? doneTimeout,
+  }) =>
+      (super.noSuchMethod(
         Invocation.method(
           #execute,
           [cmd],
+          {#doneTimeout: doneTimeout},
         ),
         returnValue: _i3.Future<String?>.value(),
       ) as _i3.Future<String?>);
