@@ -392,18 +392,24 @@ export class ZombieMode {
     return { playerDamage };
   }
 
-  // Spawns a player-fired projectile; this mode's tick resolves its flight against enemies.
-  firePlayerProjectile(player, cfg, dirX, dirY) {
-    this.playerShots.spawn(player, cfg, dirX, dirY);
-  }
-
-  // Advances player arrows/specials against living enemies, crediting kills to the shooter.
-  updatePlayerShots(now) {
+  // Living enemies, as projectile targets. Used both to resolve flight and to assist aim.
+  shotTargets() {
     const targets = [];
     for (const enemy of this.enemies.values()) {
       if (enemy.dying) continue;
       targets.push({ id: enemy.id, hitbox: enemyHitbox(enemy), enemy });
     }
+    return targets;
+  }
+
+  // Spawns a player-fired projectile; this mode's tick resolves its flight against enemies.
+  firePlayerProjectile(player, cfg, dirX, dirY) {
+    this.playerShots.spawn(player, cfg, dirX, dirY, this.shotTargets());
+  }
+
+  // Advances player arrows/specials against living enemies, crediting kills to the shooter.
+  updatePlayerShots(now) {
+    const targets = this.shotTargets();
     this.playerShots.tick(now, targets, (target, shot) => {
       const enemy = target.enemy;
       if (shot.dot) {

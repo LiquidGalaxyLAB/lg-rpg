@@ -82,12 +82,15 @@ export const PLAYER_DEFAULTS = Object.freeze({
 export const PLAYER_RANGED = Object.freeze({
   // Input-to-release delay, timed to the huntress attack_1 draw frames (6 frames @ 12fps).
   windupMs: 330,
+
+  aimAssist: Object.freeze({ maxAngleDeg: 12 }),
   attacks: Object.freeze({
     // Tuned against the melee swing (15 dmg, 80px radius, 350ms); specials sit above it.
     arrow: {
       // Two-shots a basic 30hp zombie, same per-hit damage as the sword.
       sprite: 'player:huntress:proj:arrow',
-      speed: 9, damage: 35, maxRange: 380, scale: 2, cooldownMs: 500, explosionLingerMs: 220,
+      // scale sized against the huntress body (~27px): 24px sheet × 1.1 reads as an arrow, not a spear.
+      speed: 9, damage: 35, maxRange: 380, scale: 1.1, cooldownMs: 500, explosionLingerMs: 220,
     },
     fire: {
       // Fire charge: detonates on the first enemy hit with splash damage — one-shots basic zombies.

@@ -123,20 +123,27 @@ export class ZoneCaptureMode {
     return { playerDamage };
   }
 
-  // Spawns a player-fired projectile; this mode's tick resolves it against opposing players.
-  firePlayerProjectile(player, cfg, dirX, dirY) {
-    if (this.phase !== PHASE.ACTIVE || !player || player.dead) return;
-    this.playerShots.spawn(player, cfg, dirX, dirY);
-  }
-
-  // Advances player shots. No friendly fire; just-respawned players are omitted so shots pass through.
-  updatePlayerShots(now) {
+  // Hittable players, as projectile targets. Used both to resolve flight and to assist aim.
+  // Just-respawned (invulnerable) players are omitted, so assist won't lock onto them either.
+  shotTargets(now) {
     const targets = [];
     for (const p of state.players.values()) {
       if (p.dead) continue;
       if ((this.invulnUntil.get(p.playerId) || 0) > now) continue;
       targets.push({ id: p.playerId, team: p.team, hitbox: playerHitbox(p), player: p });
     }
+    return targets;
+  }
+
+  // Spawns a player-fired projectile; this mode's tick resolves it against opposing players.
+  firePlayerProjectile(player, cfg, dirX, dirY) {
+    if (this.phase !== PHASE.ACTIVE || !player || player.dead) return;
+    this.playerShots.spawn(player, cfg, dirX, dirY, this.shotTargets(Date.now()));
+  }
+
+  // Advances player shots. No friendly fire; just-respawned players are omitted so shots pass through.
+  updatePlayerShots(now) {
+    const targets = this.shotTargets(now);
     this.playerShots.tick(now, targets, (target, shot) => {
       if (this.phase !== PHASE.ACTIVE) return;
       this.queueShotDamage(target.player, shot.damage, shot);
