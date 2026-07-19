@@ -1,19 +1,5 @@
 import 'package:lg_rpg_controller/domain/repositories/game_server_repository.dart';
 
-class InitGameServerTokenUseCase {
-  final GameServerRepository repository;
-
-  InitGameServerTokenUseCase(this.repository);
-  Future<void> call() => repository.initToken();
-}
-
-class ConnectToGameServerUseCase {
-  final GameServerRepository repository;
-
-  ConnectToGameServerUseCase(this.repository);
-  Future<void> call(String serverUrl) => repository.connectToServer(serverUrl);
-}
-
 class ConnectAndJoinLobbyUseCase {
   final GameServerRepository repository;
 
@@ -36,14 +22,6 @@ class DisconnectFromGameServerUseCase {
   Future<void> call() => repository.disconnectFromServer();
 }
 
-class JoinLobbyUseCase {
-  final GameServerRepository repository;
-
-  JoinLobbyUseCase(this.repository);
-  Future<void> call({String name = 'Player'}) =>
-      repository.joinLobby(name: name);
-}
-
 class LeaveLobbyUseCase {
   final GameServerRepository repository;
   LeaveLobbyUseCase(this.repository);
@@ -56,12 +34,6 @@ class StartGameUseCase {
   Future<void> call() => repository.startGame();
 }
 
-class EndGameUseCase {
-  final GameServerRepository repository;
-  EndGameUseCase(this.repository);
-  Future<void> call() => repository.endGame();
-}
-
 class MovePlayerUseCase {
   final GameServerRepository repository;
   MovePlayerUseCase(this.repository);
@@ -71,7 +43,25 @@ class MovePlayerUseCase {
 class AttackPlayerUseCase {
   final GameServerRepository repository;
   AttackPlayerUseCase(this.repository);
-  Future<void> call() => repository.attackPlayer();
+  Future<void> call({String? kind}) => repository.attackPlayer(kind: kind);
+}
+
+class ActivatePowerupUseCase {
+  final GameServerRepository repository;
+  ActivatePowerupUseCase(this.repository);
+  Future<void> call(String type) => repository.activatePowerup(type);
+}
+
+class SelectCharacterUseCase {
+  final GameServerRepository repository;
+  SelectCharacterUseCase(this.repository);
+  Future<void> call(String character) => repository.selectCharacter(character);
+}
+
+class SetLoadoutUseCase {
+  final GameServerRepository repository;
+  SetLoadoutUseCase(this.repository);
+  Future<void> call(List<String> items) => repository.setLoadout(items);
 }
 
 class SelectGameModeUseCase {

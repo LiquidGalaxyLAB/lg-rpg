@@ -8,16 +8,15 @@ class LogService {
 
   final Logger _logger = Logger(
     printer: PrettyPrinter(
-      methodCount: 2, // Number of method calls to show
-      errorMethodCount: 8, // Stacktrace lines for errors
-      lineLength: 80, // Width of output
-      colors: true, // Colorful logs
-      printEmojis: true, // Emojis for log levels
-      dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart, // Timestamp
+      methodCount: 2,
+      errorMethodCount: 8,
+      lineLength: 80,
+      colors: true,
+      printEmojis: true,
+      dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
     ),
   );
 
-  // Public logging methods
   void d(String message) => _logger.d(message);
   void i(String message) => _logger.i(message);
   void w(String message) => _logger.w(message);

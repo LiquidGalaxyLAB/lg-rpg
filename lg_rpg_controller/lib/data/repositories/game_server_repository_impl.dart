@@ -6,7 +6,6 @@ import 'package:lg_rpg_controller/core/errors/exceptions.dart';
 import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
-import 'package:lg_rpg_controller/domain/entities/game_state_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_over_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/player_entity.dart';
@@ -29,12 +28,15 @@ class GameServerRepositoryImpl extends GameServerRepository {
 
   String? _myTeam;
 
+  // Chosen character + equipped loadout item ids; persisted and re-sent on (re)connect.
+  String _character = CharacterCatalog.defaultCharacter;
+  List<String> _loadout = <String>[];
+
   final _serverStatusController =
       StreamController<GameServerEntity>.broadcast();
   final _lobbyController = StreamController<LobbyEntity?>.broadcast();
   final _gameStartedController =
       StreamController<GameStartedEntity>.broadcast();
-  final _gameStateController = StreamController<GameStateEntity>.broadcast();
   final _gameOverController = StreamController<GameOverEntity>.broadcast();
   final _playerDiedController = StreamController<void>.broadcast();
   final _playerRespawnedController = StreamController<void>.broadcast();
@@ -62,9 +64,9 @@ class GameServerRepositoryImpl extends GameServerRepository {
             'playerId': _playerToken,
             'name': _lobbyName,
           });
+          _emitLoadoutState();
         }
       } else {
-        // Clear listeners and state on disconnect
         _unregisterSocketListeners();
         _currentLobby = null;
         _lobbyController.add(null);
@@ -73,7 +75,6 @@ class GameServerRepositoryImpl extends GameServerRepository {
   }
 
   void _registerSocketListeners() {
-    // Listen to lobby updates
     _socketService.on(SocketEvent.updateLobby, (data) {
       log.d('Received updateLobby: $data');
 
@@ -148,17 +149,8 @@ class GameServerRepositoryImpl extends GameServerRepository {
         }
       }
       if (mine == null) return;
-      final match = data['match'];
+      // Tracked so GAME_OVER can tell a winning team apart from a losing one.
       _myTeam = mine['team']?.toString();
-      _gameStateController.add(GameStateEntity(
-        hp: (mine['hp'] as num?)?.round() ?? 0,
-        maxHp: (mine['maxHp'] as num?)?.round() ?? 0,
-        elapsedMs:
-            match is Map ? ((match['elapsedMs'] as num?)?.round() ?? 0) : 0,
-        durationMs:
-            match is Map ? ((match['durationMs'] as num?)?.round() ?? 0) : 0,
-        team: _myTeam,
-      ));
     });
     _socketService.on(SocketEvent.gameOver, (data) {
       log.i('Game over from server: $data');
@@ -222,9 +214,6 @@ class GameServerRepositoryImpl extends GameServerRepository {
       _gameStartedController.stream;
 
   @override
-  Stream<GameStateEntity> get gameStateStream => _gameStateController.stream;
-
-  @override
   Stream<GameOverEntity> get gameOverStream => _gameOverController.stream;
 
   @override
@@ -246,10 +235,31 @@ class GameServerRepositoryImpl extends GameServerRepository {
   LobbyEntity? get currentLobby => _currentLobby;
 
   @override
+  String get selectedCharacter => _character;
+
+  @override
+  List<String> get selectedLoadout => List.unmodifiable(_loadout);
+
+  // Re-sends the player's character + loadout so a fresh (or reconnected) socket has them before a match starts.
+  void _emitLoadoutState() {
+    _socketService.emit(SocketEvent.selectCharacter, {
+      'playerId': _playerToken,
+      'character': _character,
+    });
+    _socketService.emit(SocketEvent.setLoadout, {
+      'playerId': _playerToken,
+      'items': _loadout,
+    });
+  }
+
+  /// Loads the token (and saved character/loadout) if not already loaded.
+  Future<void> _ensureToken() async {
+    if (_playerToken.isEmpty) await initToken();
+  }
+
+  @override
   Future<void> initToken() async {
     try {
-      log.d('Checking local storage for existing player token...');
-
       String? token = await _localStorage.getPlayerToken();
 
       if (token == null || token.isEmpty) {
@@ -261,6 +271,13 @@ class GameServerRepositoryImpl extends GameServerRepository {
       }
 
       _playerToken = token;
+
+      // Restore the saved character + loadout so they survive an app restart.
+      final savedCharacter = await _localStorage.getPlayerCharacter();
+      if (savedCharacter != null && savedCharacter.isNotEmpty) {
+        _character = savedCharacter;
+      }
+      _loadout = await _localStorage.getPlayerLoadout();
     } catch (e) {
       log.e('Failed to initialize player token: $e');
     }
@@ -270,7 +287,6 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> connectToServer(String serverUrl) async {
     try {
       _serverUrl = serverUrl;
-
       // Health-check first so we surface a clear "server unreachable" error instead of a socket timeout.
       await _preflightHealthCheck(_serverUrl);
       await _socketService.connect(_serverUrl);
@@ -328,9 +344,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
   Future<void> joinLobby({String name = 'Player'}) async {
     try {
       log.i('Joining lobby ...');
-      if (_playerToken.isEmpty) {
-        await initToken();
-      }
+      await _ensureToken();
 
       await _localStorage.savePlayerName(name);
       _wantsLobby = true;
@@ -339,8 +353,11 @@ class GameServerRepositoryImpl extends GameServerRepository {
         'playerId': _playerToken,
         'name': name,
       });
+      _emitLoadoutState();
     } catch (e) {
+      // Surface the failure so the "Connect to Server" button can report it instead of silently appearing to have connected.
       log.e('Failed to join lobby: $e');
+      rethrow;
     }
   }
 
@@ -352,7 +369,6 @@ class GameServerRepositoryImpl extends GameServerRepository {
       _socketService.emit(SocketEvent.leaveLobby, {
         'playerId': _playerToken,
       });
-      // Locally reset lobby state
       _currentLobby = null;
       _lobbyController.add(null);
     } catch (e) {
@@ -362,30 +378,18 @@ class GameServerRepositoryImpl extends GameServerRepository {
 
   @override
   Future<void> startGame() async {
-    try {
-      log.i('Starting game...');
-      _socketService.emit(SocketEvent.startGame, {});
-    } catch (e) {
-      log.e('Failed to start game: $e');
+    log.i('Starting game...');
+    // The emit is fire-and-forget — a server-side refusal comes back asynchronously on lobbyError; the only failure we can catch locally is a dead socket, so surface that.
+    if (!_isConnected) {
+      throw GameServerException('Not connected to the game server.');
     }
-  }
-
-  @override
-  Future<void> endGame() async {
-    try {
-      log.i('Ending game...');
-      _socketService.emit(SocketEvent.endGame, {});
-    } catch (e) {
-      log.e('Failed to end game: $e');
-    }
+    _socketService.emit(SocketEvent.startGame, {});
   }
 
   @override
   Future<void> movePlayer(double dx, double dy) async {
     try {
-      if (_playerToken.isEmpty) {
-        await initToken();
-      }
+      await _ensureToken();
       _socketService.emit(SocketEvent.move, {
         'playerId': _playerToken,
         'dx': dx,
@@ -397,17 +401,55 @@ class GameServerRepositoryImpl extends GameServerRepository {
   }
 
   @override
-  Future<void> attackPlayer() async {
+  Future<void> attackPlayer({String? kind}) async {
     try {
-      if (_playerToken.isEmpty) {
-        await initToken();
-      }
+      await _ensureToken();
       // Server cooldown-gates this; spamming the button is harmless.
-      _socketService.emit(SocketEvent.playerAttack, {
-        'playerId': _playerToken,
-      });
+      final payload = <String, dynamic>{'playerId': _playerToken};
+      if (kind != null) payload['kind'] = kind;
+      _socketService.emit(SocketEvent.playerAttack, payload);
     } catch (e) {
       log.e('Failed to emit attack: $e');
+    }
+  }
+
+  @override
+  Future<void> activatePowerup(String type) async {
+    try {
+      _socketService.emit(SocketEvent.activatePowerup, {
+        'playerId': _playerToken,
+        'type': type,
+      });
+    } catch (e) {
+      log.e('Failed to activate powerup: $e');
+    }
+  }
+
+  @override
+  Future<void> selectCharacter(String character) async {
+    try {
+      _character = character;
+      await _localStorage.savePlayerCharacter(character);
+      _socketService.emit(SocketEvent.selectCharacter, {
+        'playerId': _playerToken,
+        'character': character,
+      });
+    } catch (e) {
+      log.e('Failed to select character: $e');
+    }
+  }
+
+  @override
+  Future<void> setLoadout(List<String> items) async {
+    try {
+      _loadout = List<String>.from(items);
+      await _localStorage.savePlayerLoadout(_loadout);
+      _socketService.emit(SocketEvent.setLoadout, {
+        'playerId': _playerToken,
+        'items': _loadout,
+      });
+    } catch (e) {
+      log.e('Failed to set loadout: $e');
     }
   }
 

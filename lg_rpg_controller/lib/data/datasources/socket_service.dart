@@ -7,7 +7,6 @@ class SocketService implements ISocketService {
   final log = LogService();
   io.Socket? _socket;
 
-  // Stream to expose connection status updates
   final _connectionController = StreamController<bool>.broadcast();
 
   @override
@@ -20,7 +19,7 @@ class SocketService implements ISocketService {
   Future<void> connect(String url) async {
     try {
       log.i('SocketService: Connecting to $url...');
-      await disconnect(); // Reset any existing connection
+      await disconnect();
       final completer = Completer<void>();
 
       _socket = io.io(

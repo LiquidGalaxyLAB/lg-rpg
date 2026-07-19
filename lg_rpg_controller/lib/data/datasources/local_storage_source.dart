@@ -13,6 +13,9 @@ class LocalStorageDataSource {
   static const _keyScreens = 'lg_screens';
   static const _keyPlayerToken = 'player_token';
   static const _keyPlayerName = 'player_name';
+  static const _keyCharacter = 'player_character';
+  static const _keyLoadout = 'player_loadout';
+  static const _keyThemeMode = 'theme_mode';
 
   Future<void> saveSettings(ConnectionEntity connection) async {
     await _storage.write(key: _keyIp, value: connection.ip);
@@ -42,6 +45,16 @@ class LocalStorageDataSource {
     return null;
   }
 
+  /// Saved on its own key so a screen count chosen before the first successful connect (no full profile yet) still survives a restart.
+  Future<void> saveScreenNumber(int screens) async {
+    await _storage.write(key: _keyScreens, value: screens.toString());
+  }
+
+  Future<int?> getScreenNumber() async {
+    final raw = await _storage.read(key: _keyScreens);
+    return raw == null ? null : int.tryParse(raw);
+  }
+
   Future<void> clearSettings() async {
     await _storage.delete(key: _keyIp);
     await _storage.delete(key: _keyUsername);
@@ -64,5 +77,33 @@ class LocalStorageDataSource {
 
   Future<String?> getPlayerName() async {
     return await _storage.read(key: _keyPlayerName);
+  }
+
+  Future<void> savePlayerCharacter(String character) async {
+    await _storage.write(key: _keyCharacter, value: character);
+  }
+
+  Future<String?> getPlayerCharacter() async {
+    return await _storage.read(key: _keyCharacter);
+  }
+
+  // Stored as the ThemeMode enum name: 'system' | 'light' | 'dark'.
+  Future<void> saveThemeMode(String mode) async {
+    await _storage.write(key: _keyThemeMode, value: mode);
+  }
+
+  Future<String?> getThemeMode() async {
+    return await _storage.read(key: _keyThemeMode);
+  }
+
+  // Loadout item ids are stored as a comma-separated string.
+  Future<void> savePlayerLoadout(List<String> items) async {
+    await _storage.write(key: _keyLoadout, value: items.join(','));
+  }
+
+  Future<List<String>> getPlayerLoadout() async {
+    final raw = await _storage.read(key: _keyLoadout);
+    if (raw == null || raw.isEmpty) return <String>[];
+    return raw.split(',').where((s) => s.isNotEmpty).toList();
   }
 }

@@ -1,7 +1,6 @@
 import 'package:lg_rpg_controller/domain/entities/lobby_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_server_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_started_entity.dart';
-import 'package:lg_rpg_controller/domain/entities/game_state_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/game_over_entity.dart';
 
 abstract class GameServerRepository {
@@ -10,8 +9,6 @@ abstract class GameServerRepository {
   Stream<LobbyEntity?> get lobbyStream;
 
   Stream<GameStartedEntity> get gameStartedStream;
-
-  Stream<GameStateEntity> get gameStateStream;
 
   Stream<GameOverEntity> get gameOverStream;
 
@@ -27,6 +24,12 @@ abstract class GameServerRepository {
 
   LobbyEntity? get currentLobby;
 
+  /// The character this player has chosen (its specials load free).
+  String get selectedCharacter;
+
+  /// The power-up/health item ids equipped into the loadout slots.
+  List<String> get selectedLoadout;
+
   Future<void> initToken();
 
   Future<void> connectToServer(String serverUrl);
@@ -39,11 +42,19 @@ abstract class GameServerRepository {
 
   Future<void> startGame();
 
-  Future<void> endGame();
-
   Future<void> movePlayer(double dx, double dy);
 
-  Future<void> attackPlayer();
+  /// Fires an attack; [kind] picks a special (validated server-side), else basic.
+  Future<void> attackPlayer({String? kind});
+
+  /// Activates an equipped loadout item (power-up buff or health potion) by id.
+  Future<void> activatePowerup(String type);
+
+  /// Picks the player's character (its specials load free).
+  Future<void> selectCharacter(String character);
+
+  /// Sets the equipped loadout item ids.
+  Future<void> setLoadout(List<String> items);
 
   Future<void> selectGameMode(String mode);
 
