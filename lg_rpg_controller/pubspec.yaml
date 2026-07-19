@@ -30,8 +30,8 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_joystick: ^0.2.2
   google_fonts: ^6.2.1
-
-
+  google_maps_flutter: ^2.17.1
+  http: ^1.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -45,3 +45,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/image/logo.png
+    - assets/sprites/huntress/
+    - assets/sprites/water_priestess/
