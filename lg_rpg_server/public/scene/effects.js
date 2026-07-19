@@ -124,7 +124,11 @@ export function updateAuraFx(scene, sprite, entity, localX, visible) {
   if (!sprite.auraFx) {
     sprite.auraFx = scene.add.sprite(localX, entity.y, 'fx:aura', 0).setOrigin(0.5, 0.7);
     sprite.auraFx.play('fx:aura:pulse');
-    const targetW = Math.max(sprite.displayWidth * 0.72, 34);
+
+    const bodyTop = sprite.cfg.bodyHeight != null
+      ? sprite.cfg.bodyHeight * sprite.scaleY
+      : sprite.displayHeight * sprite.originY;
+    const targetW = Math.max(bodyTop * 1.3, 30);
     sprite.auraFx.setScale(targetW / sprite.auraFx.width);
   }
   let alpha = 0.9;
