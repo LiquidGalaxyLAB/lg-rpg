@@ -14,16 +14,19 @@ class SshService implements ISshService {
   int _connectionGeneration = 0;
   bool _healthCheckInProgress = false;
 
+  /// Consecutive failed health pings; one slow ping (Wi-Fi power save, busy rig) is not a dead link — only a streak counts as a real loss.
+  int _healthStrikes = 0;
+  static const int _maxHealthStrikes = 3;
+
   static const _connectTimeout = Duration(seconds: 15);
   static const _authTimeout = Duration(seconds: 10);
   static const _commandOpenTimeout = Duration(seconds: 5);
   static const _commandDoneTimeout = Duration(seconds: 5);
 
-  // Callback for when connection is lost
   @override
   void Function()? onConnectionLost;
 
-  // Store credentials for reconnection (runtime only, not persistent)
+  // Credentials kept for reconnection (runtime only, never persisted).
   String? _ip;
   String? _password;
   String? _user;
@@ -32,16 +35,13 @@ class SshService implements ISshService {
   bool get _hasCredentials =>
       _ip != null && _password != null && _user != null && _port != null;
 
-  /// Returns true if the SSH client is connected and healthy.
   @override
   bool get isConnected =>
       _isHealthy && _client != null && !_client!.isClosed && _hasCredentials;
 
-  /// Exposes the password for system commands (relaunch, reboot, etc.)
   @override
   String? get password => _password;
 
-  /// Exposes the username for system commands
   @override
   String? get username => _user;
 
@@ -92,6 +92,7 @@ class SshService implements ISshService {
       }
 
       _isHealthy = true;
+      _healthStrikes = 0;
     } catch (e) {
       _client = null;
       _isHealthy = false;
@@ -100,7 +101,6 @@ class SshService implements ISshService {
     }
   }
 
-  /// Start periodic health check every 5 seconds
   void _startHealthCheck() {
     _healthCheckTimer?.cancel();
     _healthCheckTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -108,7 +108,6 @@ class SshService implements ISshService {
     });
   }
 
-  /// Stop health check timer
   void _stopHealthCheck() {
     _healthCheckTimer?.cancel();
     _healthCheckTimer = null;
@@ -134,10 +133,29 @@ class SshService implements ISshService {
 
       if (generation == _connectionGeneration && _client == client) {
         _isHealthy = true;
+        _healthStrikes = 0;
       }
     } catch (e) {
-      log.e('SSH Health Check Failed: $e');
-      _handleConnectionLost(generation, client);
+      if (generation != _connectionGeneration || _client != client) {
+        return; // superseded by a newer connect/disconnect
+      }
+      _healthStrikes++;
+      log.w('SSH health ping failed ($_healthStrikes/$_maxHealthStrikes): $e');
+      if (_healthStrikes < _maxHealthStrikes) return;
+
+      // After a full streak of silence, try one silent reconnect first (also revives sessions Android froze in the background) and only tell the UI if that fails too.
+      _healthStrikes = 0;
+      try {
+        await _establishConnection(generation);
+        log.i('SSH reconnected silently after failed health pings');
+      } catch (_) {
+        if (generation == _connectionGeneration) {
+          _isHealthy = false;
+          _closeClient();
+          log.i('SSH Connection lost - notifying listeners');
+          onConnectionLost?.call();
+        }
+      }
     } finally {
       _healthCheckInProgress = false;
     }
@@ -179,34 +197,66 @@ class SshService implements ISshService {
     _port = null;
   }
 
-  @override
-  Future<String?> execute(String cmd) async {
+  /// Throws when never connected; otherwise revives a closed client in place.
+  Future<void> _ensureClient() async {
     if (!_hasCredentials) {
       throw Exception('SSH not connected. Please connect first.');
     }
+    if (_client == null || _client!.isClosed) {
+      await _establishConnection(_connectionGeneration);
+    }
+  }
+
+  @override
+  Future<String?> execute(String cmd, {Duration? doneTimeout}) async {
+    if (!_hasCredentials) {
+      throw Exception('SSH not connected. Please connect first.');
+    }
+    final commandDoneTimeout = doneTimeout ?? _commandDoneTimeout;
 
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
-        if (_client == null || _client!.isClosed) {
-          await _establishConnection(_connectionGeneration);
-        }
+        await _ensureClient();
 
-        // Use execute() for proper command execution on LG
-        final session = await _client!.execute(cmd);
+        final SSHSession session;
+        try {
+          session = await _client!.execute(cmd).timeout(_commandOpenTimeout);
+        } on TimeoutException {
+          // Opening the channel is a handshake, not work: if the rig doesn't
+          // ack it in time the socket is dead (silent Wi-Fi drop), not busy.
+          // Unlike a slow command below, keeping the client here would make
+          // the retry reuse the same dead socket and time out identically.
+          log.w('SSH channel open timed out (attempt ${attempt + 1}): $cmd');
+          _closeClient();
+          _isHealthy = false;
+          if (attempt == 1) {
+            onConnectionLost?.call();
+            rethrow;
+          }
+          continue;
+        }
 
         final stdoutBuffer = StringBuffer();
         final stdoutSub = session.stdout.listen(
           (data) => stdoutBuffer.write(utf8.decode(data, allowMalformed: true)),
         );
 
-        await session.done; // Wait for command to complete
+        // Bounded like the connect and health-check paths: a command that never returns must not hang the caller and queue every later request behind it.
+        await session.done.timeout(commandDoneTimeout);
         await stdoutSub
             .asFuture<void>()
             .timeout(const Duration(seconds: 2), onTimeout: () {});
         await stdoutSub.cancel();
 
         _isHealthy = true; // Command succeeded, connection is healthy
+        _healthStrikes = 0;
         return stdoutBuffer.toString();
+      } on TimeoutException {
+        // A slow command is not a dead connection. Tearing down the shared
+        // client here would also kill any concurrent SFTP upload or health
+        // check, which is what made one heavy command stall everything else.
+        log.w('SSH command timed out (attempt ${attempt + 1}): $cmd');
+        if (attempt == 1) rethrow;
       } catch (e) {
         log.e('SSH Execute Error (attempt ${attempt + 1}): $e');
         _closeClient();
@@ -220,22 +270,18 @@ class SshService implements ISshService {
     return null;
   }
 
-  /// Upload content to remote path via SFTP.
-  /// Used for uploading KML files to /var/www/html/
+  /// Uploads text via SFTP; used for KML files under /var/www/html/.
   @override
-  Future<void> uploadViaSftp(String content, String remotePath) async {
-    if (!_hasCredentials) {
-      throw Exception('SSH not connected. Please connect first.');
-    }
+  Future<void> uploadViaSftp(String content, String remotePath) =>
+      uploadBytesViaSftp(Uint8List.fromList(content.codeUnits), remotePath);
 
+  /// Uploads bytes via SFTP; used for KML and logo images under /var/www/html/.
+  @override
+  Future<void> uploadBytesViaSftp(Uint8List bytes, String remotePath) async {
     try {
-      if (_client == null || _client!.isClosed) {
-        await _establishConnection(_connectionGeneration);
-      }
+      await _ensureClient();
 
       final sftp = await _client!.sftp();
-
-      // Open file for writing (create if not exists, truncate if exists)
       final file = await sftp.open(
         remotePath,
         mode: SftpFileOpenMode.create |
@@ -243,12 +289,11 @@ class SshService implements ISshService {
             SftpFileOpenMode.write,
       );
 
-      // Write content as bytes
-      final bytes = Uint8List.fromList(content.codeUnits);
       await file.write(Stream.fromIterable([bytes]));
       await file.close();
 
       _isHealthy = true;
+      _healthStrikes = 0;
       log.i('SFTP Upload successful: $remotePath');
     } catch (e) {
       log.e('SFTP Upload Error: $e');
@@ -257,41 +302,6 @@ class SshService implements ISshService {
     }
   }
 
-  /// Upload binary data (e.g., images) to remote path via SFTP.
-  /// Used for uploading logo images to /var/www/html/
-  @override
-  Future<void> uploadBytesViaSftp(Uint8List bytes, String remotePath) async {
-    if (!_hasCredentials) {
-      throw Exception('SSH not connected. Please connect first.');
-    }
-
-    try {
-      if (_client == null || _client!.isClosed) {
-        await _establishConnection(_connectionGeneration);
-      }
-
-      final sftp = await _client!.sftp();
-
-      final file = await sftp.open(
-        remotePath,
-        mode: SftpFileOpenMode.create |
-            SftpFileOpenMode.truncate |
-            SftpFileOpenMode.write,
-      );
-
-      await file.write(Stream.fromIterable([bytes]));
-      await file.close();
-
-      _isHealthy = true;
-      log.i('SFTP Binary Upload successful: $remotePath');
-    } catch (e) {
-      log.e('SFTP Binary Upload Error: $e');
-      _isHealthy = false;
-      rethrow;
-    }
-  }
-
-  /// Dispose method to clean up resources
   @override
   void dispose() {
     _stopHealthCheck();
