@@ -26,7 +26,6 @@ class ConnectionNotifier extends StateNotifier<ConnectionEntity> {
     _setupConnectionListener();
   }
 
-  /// Setup listener for connection lost events from SSH service
   void _setupConnectionListener() {
     _sshService.onConnectionLost = () {
       if (state.isConnected) {
@@ -45,14 +44,12 @@ class ConnectionNotifier extends StateNotifier<ConnectionEntity> {
         port: savedSettings.port,
         screenNumber: savedSettings.screenNumber,
       );
-    }
-  }
-
-  /// Sync the provider state with actual SSH service connection status
-  void syncConnectionStatus() {
-    final actuallyConnected = _sshService.isConnected;
-    if (state.isConnected != actuallyConnected) {
-      state = state.copyWith(isConnected: actuallyConnected);
+    } else {
+      // No full profile yet, but a screen count may have been saved before the first successful connect; restore it so it isn't quietly reset to 3.
+      final screens = await _repository.getStoredScreenNumber();
+      if (screens != null) {
+        state = state.copyWith(screenNumber: screens);
+      }
     }
   }
 
