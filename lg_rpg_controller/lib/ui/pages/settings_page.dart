@@ -42,7 +42,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   /// Seeds the text fields from the saved profile once, so persisted settings aren't replaced by the hardcoded defaults.
   void _seedFieldsFromSettings(ConnectionEntity conn) {
-    if (_fieldsInitialized || conn.ip.isEmpty) return;
+    if (_fieldsInitialized) return;
+    if (conn.ip.isEmpty) {
+      // No full profile saved, but a screen count chosen before the first successful connect may have loaded; seed only while the field still holds its untouched default so the user's typing is never replaced.
+      if (conn.screenNumber != 3 && _screenNumberController.text == '3') {
+        _screenNumberController.text = conn.screenNumber.toString();
+      }
+      return;
+    }
     _fieldsInitialized = true;
     _ipController.text = conn.ip;
     _portController.text = conn.port.toString();
@@ -63,8 +70,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message);
   }
 
   Future<void> _connect() async {
