@@ -3,6 +3,7 @@ import 'package:lg_rpg_controller/data/datasources/local_storage_source.dart';
 import 'package:lg_rpg_controller/data/repositories/lg_repository_impl.dart';
 import 'package:lg_rpg_controller/domain/entities/connection_entity.dart';
 import 'package:lg_rpg_controller/domain/entities/fly_to_entity.dart';
+import 'package:lg_rpg_controller/domain/entities/orbit_entity.dart';
 import 'package:lg_rpg_controller/domain/services/ssh_service_interface.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -21,6 +22,8 @@ void main() {
 
     // Common stubs: constructor calls _loadScreenNumber
     when(mockStorage.loadSettings()).thenAnswer((_) async => null);
+    when(mockStorage.getScreenNumber()).thenAnswer((_) async => 3);
+    when(mockStorage.saveScreenNumber(any)).thenAnswer((_) async {});
     when(mockSshService.execute(any)).thenAnswer((_) async => 'OK');
     when(mockSshService.disconnect()).thenAnswer((_) async {});
     when(mockSshService.password).thenReturn('lg');
@@ -28,9 +31,7 @@ void main() {
     repository = LgRepositoryImpl(mockSshService, mockStorage);
   });
 
-  // ─────────────────────────────────────────────────────────────
   // CONNECTION MANAGEMENT
-  // ─────────────────────────────────────────────────────────────
 
   group('Connection Management', () {
     test('should delegate connect call to SSH service', () async {
@@ -57,9 +58,7 @@ void main() {
     });
   });
 
-  // ─────────────────────────────────────────────────────────────
   // SETTINGS PERSISTENCE
-  // ─────────────────────────────────────────────────────────────
 
   group('Settings Persistence', () {
     test('should save connection settings to local storage', () async {
@@ -96,26 +95,15 @@ void main() {
     });
 
     test('should update screen number and persist it', () async {
-      final existing = ConnectionEntity(
-        ip: '1.1.1.1',
-        username: 'lg',
-        password: 'lg',
-        port: 22,
-        screenNumber: 3,
-      );
-      when(mockStorage.loadSettings()).thenAnswer((_) async => existing);
-      when(mockStorage.saveSettings(any)).thenAnswer((_) async {});
-
       await repository.setScreenNumber(5);
 
       expect(repository.screenNumber, 5);
-      verify(mockStorage.saveSettings(any)).called(1);
+      // Persists to the standalone key even with no saved profile, so the choice survives a failed first connect.
+      verify(mockStorage.saveScreenNumber(5)).called(1);
     });
   });
 
-  // ─────────────────────────────────────────────────────────────
   // NAVIGATION COMMANDS
-  // ─────────────────────────────────────────────────────────────
 
   group('Navigation Commands', () {
     test('should build correct LookAt KML and send via query', () async {
@@ -147,9 +135,7 @@ void main() {
     });
   });
 
-  // ─────────────────────────────────────────────────────────────
   // KML OPERATIONS
-  // ─────────────────────────────────────────────────────────────
 
   group('KML Operations', () {
     test('should upload KML content via SFTP to correct path', () async {
@@ -170,78 +156,118 @@ void main() {
       ))).called(1);
     });
 
-    test('should send KML content to master.kml', () async {
-      await repository.sendKmlToMaster('<kml>master</kml>');
+    test('should publish KML by uploading it and pointing kmls.txt at it',
+        () async {
+      when(mockSshService.uploadViaSftp(any, any)).thenAnswer((_) async {});
 
-      // sendKmlToMaster creates the kml directory first, then writes
-      verify(mockSshService.execute('mkdir -p /var/www/html/kml')).called(1);
-      verify(mockSshService.execute(argThat(
-        contains('> /var/www/html/kml/master.kml'),
-      ))).called(1);
+      await repository.sendKml('<kml>area</kml>', 'area');
+
+      // Standard LG pattern: SFTP the file, then list its URL in kmls.txt, which the rig's sync_nlc.php poller picks up live.
+      verify(mockSshService.uploadViaSftp(
+        '<kml>area</kml>',
+        argThat(allOf(startsWith('/var/www/html/area_'), endsWith('.kml'))),
+      )).called(1);
+      verify(mockSshService.execute(argThat(allOf(
+        contains('http://lg1:81/area_'),
+        contains('> /var/www/html/kmls.txt'),
+      )))).called(1);
     });
 
-    test('should clean all KML files across all screens', () async {
+    test('should never write master.kml, the sync_nlc anchor', () async {
+      when(mockSshService.uploadViaSftp(any, any)).thenAnswer((_) async {});
+
+      await repository.sendKml('<kml>area</kml>', 'area');
+      await repository.cleanAllKml();
+
+      // master.kml holds the empty <Document id="master"> that sync_nlc's <Update> targets. Overwriting it silently kills every live update until Google Earth restarts — the original "only works after reboot" bug.
+      verifyNever(mockSshService.execute(argThat(contains('master.kml'))));
+      verifyNever(
+          mockSshService.uploadViaSftp(any, argThat(contains('master.kml'))));
+    });
+
+    test('should give each KML a unique URL so Earth re-fetches it', () async {
+      when(mockSshService.uploadViaSftp(any, any)).thenAnswer((_) async {});
+      final paths = <String>[];
+      when(mockSshService.uploadViaSftp(any, any)).thenAnswer((inv) async {
+        paths.add(inv.positionalArguments[1] as String);
+      });
+
+      await repository.sendKml('<kml>a</kml>', 'area');
+      await Future.delayed(const Duration(milliseconds: 2));
+      await repository.sendKml('<kml>b</kml>', 'area');
+
+      // The NetworkLink sync_nlc creates has no refresh of its own, so reusing a URL would never re-fetch; a new URL forces a Delete + Create.
+      expect(paths.length, 2);
+      expect(paths[0], isNot(equals(paths[1])));
+    });
+
+    test('should clean by emptying kmls.txt and stopping the tour', () async {
       // Default screen number is 3 (from setUp)
       await repository.cleanAllKml();
 
-      // Should clear master.kml
-      verify(mockSshService.execute(argThat(
-        contains('> /var/www/html/kml/master.kml'),
-      ))).called(1);
-
-      // Should clear query.txt
-      verify(mockSshService.execute(argThat(
-        contains('> /tmp/query.txt'),
-      ))).called(1);
-
-      // Should clear all 3 slave screens
-      verify(mockSshService.execute(argThat(
-        contains('slave_1.kml'),
-      ))).called(1);
-      verify(mockSshService.execute(argThat(
-        contains('slave_2.kml'),
-      ))).called(1);
-      verify(mockSshService.execute(argThat(
-        contains('slave_3.kml'),
-      ))).called(1);
-    });
-
-    test('should clear only the navigation query file', () async {
-      await repository.clearNavigation();
-
-      verify(mockSshService.execute('echo "" > /tmp/query.txt')).called(1);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // VISUAL ELEMENTS
-  // ─────────────────────────────────────────────────────────────
-
-  group('Visual Elements', () {
-    test('should clean logo by sending empty KML to leftmost screen', () async {
-      await repository.cleanLogo();
-
-      // Default 3 screens → leftmost = floor(3/2) + 2 = 3
       verify(mockSshService.execute(argThat(allOf(
-        contains('<name>Empty</name>'),
-        contains('> /var/www/html/kml/slave_3.kml'),
+        contains('exittour=true'),
+        contains('> /var/www/html/kmls.txt'),
+      )))).called(1);
+
+      // Slave screens carry their own per-screen KML (e.g. the logo).
+      for (final screen in [1, 2, 3]) {
+        verify(mockSshService.execute(argThat(
+          contains('slave_$screen.kml'),
+        ))).called(1);
+      }
+    });
+
+    test('should wipe the logo along with everything else', () async {
+      await repository.cleanAllKml();
+
+      // Clear means clear: blanking every slave takes the logo off the leftmost screen (floor(3/2)+2 = 3) and nothing puts it back.
+      verifyNever(mockSshService.execute(argThat(contains('<ScreenOverlay>'))));
+    });
+
+    test('should orbit by uploading a gx:Tour and playing it', () async {
+      when(mockSshService.uploadViaSftp(any, any)).thenAnswer((_) async {});
+
+      await repository.orbit(const OrbitEntity(
+        latitude: 41.6,
+        longitude: 0.62,
+        duration: 1,
+      ));
+
+      // The canonical LG orbit: one gx:Tour uploaded once, played by name — Earth animates the whole path locally, no per-step SSH traffic.
+      verify(mockSshService.uploadViaSftp(
+        argThat(allOf(
+          contains('<gx:Tour>'),
+          contains('<gx:FlyTo>'),
+          contains('<latitude>41.6</latitude>'),
+        )),
+        argThat(allOf(
+          startsWith('/var/www/html/Orbit_'),
+          endsWith('.kml'),
+        )),
+      )).called(1);
+      verify(mockSshService.execute(argThat(allOf(
+        contains('playtour=Orbit_'),
+        contains('/tmp/query.txt'),
+      )))).called(1);
+      // The tour must be registered in kmls.txt without wiping other KMLs.
+      verify(mockSshService.execute(argThat(allOf(
+        contains('>> /var/www/html/kmls.txt'),
+        contains('Orbit_'),
       )))).called(1);
     });
 
-    test('should send HTML overlay to rightmost screen', () async {
-      await repository.sendHtmlOverlay('<h1>Hello LG</h1>');
+    test('should stop the orbit tour via exittour', () async {
+      await repository.stopTour();
 
-      // Default 3 screens → rightmost = floor(3/2) + 1 = 2
       verify(mockSshService.execute(argThat(allOf(
-        contains('<h1>Hello LG</h1>'),
-        contains('> /var/www/html/kml/slave_2.kml'),
+        contains('exittour=true'),
+        contains('/tmp/query.txt'),
       )))).called(1);
     });
   });
 
-  // ─────────────────────────────────────────────────────────────
   // SYSTEM CONTROLS
-  // ─────────────────────────────────────────────────────────────
 
   group('System Controls', () {
     test('should send reboot command to all screens in reverse order',
@@ -301,23 +327,88 @@ void main() {
       expectLater(repository.relaunch(), throwsException);
     });
 
-    test('should send sed commands for force refresh on a screen', () async {
-      await repository.forceRefresh(2);
+    // The template line each sed must match, and the two substitutions.
+    const tags = '<refreshMode>onInterval</refreshMode>'
+        '<refreshInterval>2</refreshInterval>';
+    // The strip matches any interval, so a link left on a different value is still removed instead of getting a second block appended beside it.
+    const anyTags = '<refreshMode>onInterval</refreshMode>'
+        '<refreshInterval>[0-9]*</refreshInterval>';
+    String link(int s) => '<href>##LG_PHPIFACE##kml/slave_$s.kml</href>';
+    String addSed(int s) => 's|${link(s)}|${link(s)}$tags|';
+    String stripSed(int s) => 's|${link(s)}$anyTags|${link(s)}|';
 
-      // Should execute 2 SSH commands (set refresh + remove refresh)
-      verify(mockSshService.execute(argThat(allOf(
-        contains('sshpass'),
-        contains('lg2'),
-        contains('sed'),
-      )))).called(2);
+    test('should add refresh tags to every slave screen', () async {
+      // Default screen number is 3 (from setUp) -> slaves are lg2 and lg3.
+      await repository.setRefresh();
+
+      for (final screen in [2, 3]) {
+        verify(mockSshService.execute(argThat(allOf(
+          contains('lg$screen'),
+          contains(addSed(screen)),
+          contains('~/earth/kml/slave/myplaces.kml'),
+        )))).called(1);
+      }
     });
 
-    test('should skip force refresh when password is empty', () async {
+    test('should not escape slashes, which made the old sed match nothing',
+        () async {
+      await repository.setRefresh();
+
+      // The template holds a literal <href>##LG_PHPIFACE##kml/slave_2.kml</href>. The sed uses s|...|...|, so slashes need no escaping; the old code's "kml\\/slave_2.kml</\\/href>" matched no line in the file at all.
+      verifyNever(mockSshService.execute(argThat(contains(r'\/'))));
+    });
+
+    test('should leave the master screen alone', () async {
+      await repository.setRefresh();
+
+      // lg1 reads its own myplaces; only slaves are patched.
+      verifyNever(mockSshService.execute(argThat(contains('ssh -t lg1'))));
+    });
+
+    test('should strip before adding so tags cannot stack', () async {
+      final commands = <String>[];
+      when(mockSshService.execute(any)).thenAnswer((inv) async {
+        commands.add(inv.positionalArguments[0] as String);
+        return null;
+      });
+
+      await repository.setRefresh();
+
+      // Per slave: strip, then add. Running twice must not double the tags.
+      final lg2 = commands.where((c) => c.contains('lg2')).toList();
+      expect(lg2.length, 2);
+      expect(lg2.first, contains(stripSed(2)));
+      expect(lg2.last, contains(addSed(2)));
+    });
+
+    test('should strip a refresh interval it did not write', () async {
+      await repository.setRefresh();
+
+      // Another tool, or an older build, may have left a different interval on the link. An exact-match strip would miss it and the add would append a second block, leaving two refresh pairs inside one <Link>.
+      verify(mockSshService.execute(argThat(contains(
+        '<refreshInterval>[0-9]*</refreshInterval>',
+      )))).called(greaterThan(0));
+      verifyNever(mockSshService.execute(argThat(
+        contains('s|${link(2)}<refreshMode>onInterval</refreshMode>'
+            '<refreshInterval>2</refreshInterval>|'),
+      )));
+    });
+
+    test('should only strip tags on reset', () async {
+      await repository.resetRefresh();
+
+      // One command per slave, and it must never re-add the tags.
+      verify(mockSshService.execute(argThat(contains(stripSed(2))))).called(1);
+      verify(mockSshService.execute(argThat(contains(stripSed(3))))).called(1);
+      verifyNever(mockSshService.execute(argThat(contains(addSed(2)))));
+    });
+
+    test('should skip refresh changes when password is empty', () async {
       when(mockSshService.password).thenReturn('');
 
-      await repository.forceRefresh(2);
+      await repository.setRefresh();
+      await repository.resetRefresh();
 
-      // Should not call execute at all (returns early)
       verifyNever(mockSshService.execute(argThat(contains('sshpass'))));
     });
   });

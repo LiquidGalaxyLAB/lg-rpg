@@ -16,6 +16,7 @@ void main() {
 
   group('RebootLgUseCase', () {
     test('should delegate reboot to LGRepository and return result', () async {
+      when(mockRepository.setRefresh()).thenAnswer((_) async {});
       when(mockRepository.rebootAll()).thenAnswer((_) async => true);
 
       final useCase = RebootLgUseCase(mockRepository);
@@ -23,6 +24,19 @@ void main() {
 
       expect(result, true);
       verify(mockRepository.rebootAll()).called(1);
+    });
+
+    test('should set the slave refresh before rebooting', () async {
+      when(mockRepository.setRefresh()).thenAnswer((_) async {});
+      when(mockRepository.rebootAll()).thenAnswer((_) async => true);
+
+      await RebootLgUseCase(mockRepository).call();
+
+      // The patch only takes effect on the next Earth start, so it has to land before the reboot or the logo stays invisible for another whole cycle.
+      verifyInOrder([
+        mockRepository.setRefresh(),
+        mockRepository.rebootAll(),
+      ]);
     });
   });
 
@@ -50,17 +64,6 @@ void main() {
     });
   });
 
-  group('ClearNavigationUseCase', () {
-    test('should delegate clear navigation to LGRepository', () async {
-      when(mockRepository.clearNavigation()).thenAnswer((_) async {});
-
-      final useCase = ClearNavigationUseCase(mockRepository);
-      await useCase.call();
-
-      verify(mockRepository.clearNavigation()).called(1);
-    });
-  });
-
   group('CleanAllKmlUseCase', () {
     test('should delegate clean all KML to LGRepository', () async {
       when(mockRepository.cleanAllKml()).thenAnswer((_) async {});
@@ -80,17 +83,6 @@ void main() {
       await useCase.call();
 
       verify(mockRepository.sendLogo()).called(1);
-    });
-  });
-
-  group('CleanLogoUseCase', () {
-    test('should delegate clean logo to LGRepository', () async {
-      when(mockRepository.cleanLogo()).thenAnswer((_) async {});
-
-      final useCase = CleanLogoUseCase(mockRepository);
-      await useCase.call();
-
-      verify(mockRepository.cleanLogo()).called(1);
     });
   });
 }

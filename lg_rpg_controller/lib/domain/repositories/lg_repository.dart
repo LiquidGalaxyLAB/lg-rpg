@@ -17,6 +17,9 @@ abstract class LGRepository {
   Future<ConnectionEntity?> getSettings();
   Future<void> setScreenNumber(int screens);
 
+  /// Screen count from storage, or null when none saved yet; unlike [getSettings], this works before a full profile exists.
+  Future<int?> getStoredScreenNumber();
+
   Future<void> flyTo(FlyToEntity command);
   Future<void> sendQuery(String query);
 
@@ -26,24 +29,18 @@ abstract class LGRepository {
   /// Send KML content to a specific slave screen.
   Future<void> sendKmlToSlave(String kmlContent, int screen);
 
-  /// Send KML content to master.kml for synchronized display across all screens.
-  Future<void> sendKmlToMaster(String kmlContent);
+  /// Show a KML across the rig by uploading it and listing it in kmls.txt; never write master.kml — that breaks live updates until Earth restarts.
+  Future<void> sendKml(String kmlContent, String name);
 
-  /// Clean all KML content from LG (master.kml, all slave files, and navigation).
+  /// Stop any running tour.
+  Future<void> stopTour();
+
+  /// Clear all displayed KML, including the logo.
   Future<void> cleanAllKml();
-
-  /// Clear navigation query (flyto commands in /tmp/query.txt).
-  Future<void> clearNavigation();
 
   Future<void> sendLogo({String assetPath = 'image/logo.png'});
 
-  /// Clear logo from the leftmost screen.
-  Future<void> cleanLogo();
-
-  /// Send HTML content as a balloon overlay to the rightmost screen.
-  Future<void> sendHtmlOverlay(String htmlContent);
-
-  /// Start an orbit animation (KML Tour) around a point of interest.
+  /// Start an orbit animation around a point of interest.
   Future<void> orbit(OrbitEntity orbitParams);
 
   /// Reboot all LG machines. Returns true if all succeeded.
@@ -55,8 +52,11 @@ abstract class LGRepository {
   /// Relaunch Google Earth on all machines (via display manager restart).
   Future<void> relaunch();
 
-  /// Force refresh a specific screen by toggling refresh interval.
-  Future<void> forceRefresh(int screenNumber);
+  /// Make slave screens reload their KML every 2 seconds; needs a reboot to take effect.
+  Future<void> setRefresh();
+
+  /// Undo [setRefresh]. Also needs a reboot to take effect.
+  Future<void> resetRefresh();
 
   Future<void> stopServer();
 

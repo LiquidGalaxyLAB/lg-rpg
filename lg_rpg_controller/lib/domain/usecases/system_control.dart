@@ -1,14 +1,16 @@
 import '../repositories/lg_repository.dart';
 
-/// Use case for rebooting all LG machines
+/// Reboots all LG machines, patching the slaves' KML refresh first: slaves read their KML once at Earth startup unless patched, and the patch only lands on the next Earth start — which is exactly what a reboot is.
 class RebootLgUseCase {
   final LGRepository repository;
   RebootLgUseCase(this.repository);
 
-  Future<bool> call() => repository.rebootAll();
+  Future<bool> call() async {
+    await repository.setRefresh();
+    return repository.rebootAll();
+  }
 }
 
-/// Use case for relaunching Google Earth on all machines
 class RelaunchLgUseCase {
   final LGRepository repository;
   RelaunchLgUseCase(this.repository);
@@ -16,7 +18,6 @@ class RelaunchLgUseCase {
   Future<void> call() => repository.relaunch();
 }
 
-/// Use case for shutting down all LG machines
 class ShutdownLgUseCase {
   final LGRepository repository;
   ShutdownLgUseCase(this.repository);
@@ -24,15 +25,7 @@ class ShutdownLgUseCase {
   Future<bool> call() => repository.shutdownAll();
 }
 
-/// Use case for cleaning navigation query
-class ClearNavigationUseCase {
-  final LGRepository repository;
-  ClearNavigationUseCase(this.repository);
-
-  Future<void> call() => repository.clearNavigation();
-}
-
-/// Use case for cleaning all KML content
+/// Clears all KML content, logo included.
 class CleanAllKmlUseCase {
   final LGRepository repository;
   CleanAllKmlUseCase(this.repository);
@@ -40,32 +33,9 @@ class CleanAllKmlUseCase {
   Future<void> call() => repository.cleanAllKml();
 }
 
-/// Use case for sending app logo to screen
 class SendLogoUseCase {
   final LGRepository repository;
   SendLogoUseCase(this.repository);
 
   Future<void> call() => repository.sendLogo();
-}
-
-/// Use case for clearing logo from screen
-class CleanLogoUseCase {
-  final LGRepository repository;
-  CleanLogoUseCase(this.repository);
-
-  Future<void> call() => repository.cleanLogo();
-}
-
-class LaunchBrowserUseCase {
-  final LGRepository repository;
-  LaunchBrowserUseCase(this.repository);
-
-  Future<void> call() => repository.launchBrowser();
-}
-
-class CloseBrowserUseCase {
-  final LGRepository repository;
-  CloseBrowserUseCase(this.repository);
-
-  Future<void> call() => repository.closeBrowser();
 }

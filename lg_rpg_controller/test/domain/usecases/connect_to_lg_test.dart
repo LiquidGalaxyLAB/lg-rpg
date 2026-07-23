@@ -35,22 +35,4 @@ void main() {
       verify(mockRepository.disconnect()).called(1);
     });
   });
-
-  group('FlyToLocationUseCase', () {
-    test(
-        'should create FlyToEntity with given coordinates and delegate to repository',
-        () async {
-      when(mockRepository.flyTo(any)).thenAnswer((_) async {});
-
-      final useCase = FlyToLocationUseCase(mockRepository);
-      await useCase.call(28.6139, 77.2090);
-
-      // Capture the FlyToEntity that was passed to the repository
-      final captured = verify(mockRepository.flyTo(captureAny)).captured.single;
-      expect(captured.latitude, 28.6139);
-      expect(captured.longitude, 77.2090);
-      expect(captured.range, 1000);
-      expect(captured.tilt, 45);
-    });
-  });
 }

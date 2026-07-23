@@ -85,7 +85,7 @@ class MockLGRepository extends _i1.Mock implements _i2.LGRepository {
     String? username,
     String? password,
     int? port, {
-    int? screenNumber = 3,
+    int? screenNumber,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -120,6 +120,15 @@ class MockLGRepository extends _i1.Mock implements _i2.LGRepository {
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),
       ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<int?> getStoredScreenNumber() => (super.noSuchMethod(
+        Invocation.method(
+          #getStoredScreenNumber,
+          [],
+        ),
+        returnValue: _i3.Future<int?>.value(),
+      ) as _i3.Future<int?>);
 
   @override
   _i3.Future<void> flyTo(_i5.FlyToEntity? command) => (super.noSuchMethod(
@@ -176,10 +185,27 @@ class MockLGRepository extends _i1.Mock implements _i2.LGRepository {
       ) as _i3.Future<void>);
 
   @override
-  _i3.Future<void> sendKmlToMaster(String? kmlContent) => (super.noSuchMethod(
+  _i3.Future<void> sendKml(
+    String? kmlContent,
+    String? name,
+  ) =>
+      (super.noSuchMethod(
         Invocation.method(
-          #sendKmlToMaster,
-          [kmlContent],
+          #sendKml,
+          [
+            kmlContent,
+            name,
+          ],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> stopTour() => (super.noSuchMethod(
+        Invocation.method(
+          #stopTour,
+          [],
         ),
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),
@@ -196,42 +222,12 @@ class MockLGRepository extends _i1.Mock implements _i2.LGRepository {
       ) as _i3.Future<void>);
 
   @override
-  _i3.Future<void> clearNavigation() => (super.noSuchMethod(
-        Invocation.method(
-          #clearNavigation,
-          [],
-        ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
-
-  @override
   _i3.Future<void> sendLogo({String? assetPath = 'image/logo.png'}) =>
       (super.noSuchMethod(
         Invocation.method(
           #sendLogo,
           [],
           {#assetPath: assetPath},
-        ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
-
-  @override
-  _i3.Future<void> cleanLogo() => (super.noSuchMethod(
-        Invocation.method(
-          #cleanLogo,
-          [],
-        ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
-
-  @override
-  _i3.Future<void> sendHtmlOverlay(String? htmlContent) => (super.noSuchMethod(
-        Invocation.method(
-          #sendHtmlOverlay,
-          [htmlContent],
         ),
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),
@@ -276,10 +272,60 @@ class MockLGRepository extends _i1.Mock implements _i2.LGRepository {
       ) as _i3.Future<void>);
 
   @override
-  _i3.Future<void> forceRefresh(int? screenNumber) => (super.noSuchMethod(
+  _i3.Future<void> setRefresh() => (super.noSuchMethod(
         Invocation.method(
-          #forceRefresh,
-          [screenNumber],
+          #setRefresh,
+          [],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> resetRefresh() => (super.noSuchMethod(
+        Invocation.method(
+          #resetRefresh,
+          [],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> stopServer() => (super.noSuchMethod(
+        Invocation.method(
+          #stopServer,
+          [],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> startServer() => (super.noSuchMethod(
+        Invocation.method(
+          #startServer,
+          [],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> closeBrowser() => (super.noSuchMethod(
+        Invocation.method(
+          #closeBrowser,
+          [],
+        ),
+        returnValue: _i3.Future<void>.value(),
+        returnValueForMissingStub: _i3.Future<void>.value(),
+      ) as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> launchBrowser() => (super.noSuchMethod(
+        Invocation.method(
+          #launchBrowser,
+          [],
         ),
         returnValue: _i3.Future<void>.value(),
         returnValueForMissingStub: _i3.Future<void>.value(),
