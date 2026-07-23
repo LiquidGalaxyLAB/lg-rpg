@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 import 'package:lg_rpg_controller/ui/providers/connection_provider.dart';
 import 'package:lg_rpg_controller/ui/providers/lg_providers.dart';
 import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
@@ -18,8 +19,31 @@ class _LgTaskState extends ConsumerState<LgTask> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message);
+  }
+
+  /// Rebooting restarts the whole rig, so make that explicit rather than surprising someone mid-demo.
+  Future<bool> _confirmReboot(String title, String detail) async {
+    final p = context.palette;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surface,
+        title: Text(title, style: TextStyle(color: p.onSurface)),
+        content: Text(detail, style: TextStyle(color: p.onSurfaceMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancel', style: TextStyle(color: p.onSurfaceMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Reboot rig', style: TextStyle(color: p.danger)),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
   }
 
   Future<void> _run(
@@ -51,9 +75,10 @@ class _LgTaskState extends ConsumerState<LgTask> {
         leading: IconButton(
           tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
+          // Reachable from the drawer now, so back goes home, not to Settings.
           onPressed: () => ref
               .read(navigationProvider.notifier)
-              .setIndex(NavigationIndex.settings),
+              .setIndex(NavigationIndex.home),
         ),
       ),
       body: SafeArea(
@@ -124,16 +149,26 @@ class _LgTaskState extends ConsumerState<LgTask> {
                 variant: AppButtonVariant.danger,
                 loading: _busyTask == 'reboot',
                 onPressed: (connected && idle)
-                    ? () => _run(
+                    ? () async {
+                        final ok = await _confirmReboot(
+                          'Reboot the rig?',
+                          'Every machine restarts. This takes a couple of '
+                              'minutes.',
+                        );
+                        if (!ok) return;
+                        await _run(
                           'reboot',
                           () async {
-                            final ok =
+                            final accepted =
                                 await ref.read(rebootLgUseCaseProvider).call();
-                            if (!ok) throw Exception('rig did not accept');
+                            if (!accepted) {
+                              throw Exception('rig did not accept');
+                            }
                           },
                           'Rebooting all machines',
                           'Reboot failed',
-                        )
+                        );
+                      }
                     : null,
               ),
             ],
