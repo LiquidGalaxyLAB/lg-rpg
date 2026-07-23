@@ -15,9 +15,10 @@ class MatchWaitingPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final p = context.palette;
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppGradients.heroGlow),
+        decoration: BoxDecoration(gradient: p.heroGlow),
         child: SafeArea(
           child: Center(
             child: Column(
@@ -28,11 +29,11 @@ class MatchWaitingPage extends ConsumerWidget {
                   height: 96,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.surfaceHigh,
-                    border: Border.all(color: AppColors.border),
+                    color: p.surfaceHigh,
+                    border: Border.all(color: p.border),
                   ),
-                  child: const Icon(Icons.hourglass_top_rounded,
-                      size: 44, color: AppColors.primaryBright),
+                  child: Icon(Icons.hourglass_top_rounded,
+                      size: 44, color: p.primaryBright),
                 ),
                 const SizedBox(height: 28),
                 Text(
@@ -40,10 +41,9 @@ class MatchWaitingPage extends ConsumerWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Waiting for the match to end…',
-                  style:
-                      TextStyle(fontSize: 16, color: AppColors.onSurfaceMuted),
+                  style: TextStyle(fontSize: 16, color: p.onSurfaceMuted),
                 ),
                 const SizedBox(height: 32),
                 const SizedBox(
