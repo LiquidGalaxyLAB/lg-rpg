@@ -95,10 +95,15 @@ class MockISshService extends _i1.Mock implements _i3.ISshService {
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<String?> execute(String? cmd) => (super.noSuchMethod(
+  _i4.Future<String?> execute(
+    String? cmd, {
+    Duration? doneTimeout,
+  }) =>
+      (super.noSuchMethod(
         Invocation.method(
           #execute,
           [cmd],
+          {#doneTimeout: doneTimeout},
         ),
         returnValue: _i4.Future<String?>.value(),
       ) as _i4.Future<String?>);
@@ -186,6 +191,25 @@ class MockLocalStorageDataSource extends _i1.Mock
       ) as _i4.Future<_i7.ConnectionEntity?>);
 
   @override
+  _i4.Future<void> saveScreenNumber(int? screens) => (super.noSuchMethod(
+        Invocation.method(
+          #saveScreenNumber,
+          [screens],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<int?> getScreenNumber() => (super.noSuchMethod(
+        Invocation.method(
+          #getScreenNumber,
+          [],
+        ),
+        returnValue: _i4.Future<int?>.value(),
+      ) as _i4.Future<int?>);
+
+  @override
   _i4.Future<void> clearSettings() => (super.noSuchMethod(
         Invocation.method(
           #clearSettings,
@@ -194,4 +218,101 @@ class MockLocalStorageDataSource extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> savePlayerToken(String? token) => (super.noSuchMethod(
+        Invocation.method(
+          #savePlayerToken,
+          [token],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getPlayerToken() => (super.noSuchMethod(
+        Invocation.method(
+          #getPlayerToken,
+          [],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<void> savePlayerName(String? name) => (super.noSuchMethod(
+        Invocation.method(
+          #savePlayerName,
+          [name],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getPlayerName() => (super.noSuchMethod(
+        Invocation.method(
+          #getPlayerName,
+          [],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<void> savePlayerCharacter(String? character) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #savePlayerCharacter,
+          [character],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getPlayerCharacter() => (super.noSuchMethod(
+        Invocation.method(
+          #getPlayerCharacter,
+          [],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<void> saveThemeMode(String? mode) => (super.noSuchMethod(
+        Invocation.method(
+          #saveThemeMode,
+          [mode],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getThemeMode() => (super.noSuchMethod(
+        Invocation.method(
+          #getThemeMode,
+          [],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<void> savePlayerLoadout(List<String>? items) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #savePlayerLoadout,
+          [items],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<String>> getPlayerLoadout() => (super.noSuchMethod(
+        Invocation.method(
+          #getPlayerLoadout,
+          [],
+        ),
+        returnValue: _i4.Future<List<String>>.value(<String>[]),
+      ) as _i4.Future<List<String>>);
 }
