@@ -8,6 +8,7 @@ import 'package:lg_rpg_controller/ui/providers/navigation_provider.dart';
 import 'package:lg_rpg_controller/core/theme/app_theme.dart';
 import 'package:lg_rpg_controller/ui/widgets/lobby_players_section.dart';
 import 'package:lg_rpg_controller/ui/widgets/app_widgets.dart';
+import 'package:lg_rpg_controller/ui/widgets/app_drawer.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -35,63 +36,56 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
+  void _snack(String message) {
+    if (!mounted) return;
+    showAppSnack(context, message);
+  }
+
+  /// Runs [action] with [setBusy] flipped around it, surfacing failures as "[failure]: error".
+  Future<void> _runBusy(
+    void Function(bool) setBusy,
+    Future<void> Function() action,
+    String failure,
+  ) async {
+    setState(() => setBusy(true));
+    try {
+      await action();
+    } catch (error) {
+      _snack('$failure: $error');
+    } finally {
+      if (mounted) setState(() => setBusy(false));
+    }
+  }
+
   Future<void> _connectToServer() async {
     final host = ref.read(connectionProvider).ip;
     final serverUrl = GameServerConfig.urlForHost(host);
     if (serverUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Enter the Liquid Galaxy IP in Settings and connect before joining a game.'),
-        ),
-      );
+      _snack(
+          'Enter the Liquid Galaxy IP in Settings and connect before joining a game.');
       return;
     }
 
-    setState(() => _isConnecting = true);
-    try {
+    await _runBusy((b) => _isConnecting = b, () {
       final name = _nameController.text.trim();
-      await ref.read(connectAndJoinLobbyUseCaseProvider).call(
+      return ref.read(connectAndJoinLobbyUseCaseProvider).call(
             serverUrl: serverUrl,
             name: name.isEmpty ? 'Player' : name,
           );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to connect to server: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _isConnecting = false);
-    }
+    }, 'Failed to connect to server');
   }
 
-  Future<void> _disconnectServer() async {
-    setState(() => _isDisconnecting = true);
-    try {
-      await ref.read(disconnectFromGameServerUseCaseProvider).call();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to disconnect: $error')),
+  Future<void> _disconnectServer() => _runBusy(
+        (b) => _isDisconnecting = b,
+        () => ref.read(disconnectFromGameServerUseCaseProvider).call(),
+        'Failed to disconnect',
       );
-    } finally {
-      if (mounted) setState(() => _isDisconnecting = false);
-    }
-  }
 
-  Future<void> _startGame() async {
-    setState(() => _isStartingGame = true);
-    try {
-      await ref.read(startGameUseCaseProvider).call();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start game: $error')),
+  Future<void> _startGame() => _runBusy(
+        (b) => _isStartingGame = b,
+        () => ref.read(startGameUseCaseProvider).call(),
+        'Failed to start game',
       );
-    } finally {
-      if (mounted) setState(() => _isStartingGame = false);
-    }
-  }
 
   @override
   void dispose() {
@@ -118,10 +112,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     // Surface server-side lobby rejections (e.g. "PvP needs at least 2 players").
     ref.listen(lobbyErrorStreamProvider, (_, next) {
       next.whenData((message) {
-        if (!mounted || message.isEmpty) return;
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(message)));
+        if (message.isNotEmpty) _snack(message);
       });
     });
 
@@ -139,6 +130,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
+      // Let the body's glow run behind the transparent app bar; otherwise the bar sits as a flat dark strip above where the gradient starts.
+      extendBodyBehindAppBar: true,
+      // Hamburger on the left opens the navigation drawer (Loadout, LG Tasks…).
+      drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('LG RPG'),
         actions: [
@@ -152,7 +147,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2.4),
                     )
-                  : const Icon(Icons.link_off_rounded, color: AppColors.danger),
+                  : Icon(Icons.link_off_rounded, color: context.palette.danger),
               onPressed: _isDisconnecting ? null : _disconnectServer,
             ),
           IconButton(
@@ -165,12 +160,17 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
       body: Container(
-        decoration: const BoxDecoration(gradient: AppGradients.heroGlow),
+        decoration: BoxDecoration(gradient: context.palette.heroGlow),
         child: SafeArea(
           top: false,
           // One plain scrolling Column: a fill-remaining-space sliver silently collapsed the lobby list and Play Game to zero height when the content above filled the viewport.
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+              20,
+              20,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -249,13 +249,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                       : null,
                   showSelectedIcon: false,
                 ),
-                if (!isHost) ...[
+                if (inLobby && !isHost) ...[
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Only the host can change the mode',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
+                      color: context.palette.onSurfaceMuted,
                     ),
                   ),
                 ],
@@ -290,7 +290,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 SectionLabel('Lobby · $playerCount'),
                 const SizedBox(height: 10),
                 SizedBox(
-                  height: 240,
+                  // Shorter when there's nobody to list, so an idle lobby isn't a void — but tall enough for the empty-state message.
+                  height: playerCount > 0 ? 240 : 156,
                   child: GlassCard(
                     padding: const EdgeInsets.all(12),
                     child: LobbyPlayersSection(
@@ -302,15 +303,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 const SizedBox(height: 16),
                 AppButton(
+                  // Check inLobby before isHost: with no lobby, isHost is false by default, which otherwise blames a host that doesn't exist.
                   label: _isStartingGame
                       ? 'Starting…'
-                      : !isHost
-                          ? 'Waiting for host to start…'
-                          : needsMorePlayers
-                              ? 'PvP needs 2+ players'
-                              : teamsUnbalanced
-                                  ? 'Teams need 1 player each'
-                                  : 'Play Game',
+                      : !inLobby
+                          ? 'Connect to a server to play'
+                          : !isHost
+                              ? 'Waiting for host to start…'
+                              : needsMorePlayers
+                                  ? 'PvP needs 2+ players'
+                                  : teamsUnbalanced
+                                      ? 'Teams need 1 player each'
+                                      : 'Play Game',
                   icon: Icons.play_arrow_rounded,
                   loading: _isStartingGame,
                   onPressed: canStart ? _startGame : null,

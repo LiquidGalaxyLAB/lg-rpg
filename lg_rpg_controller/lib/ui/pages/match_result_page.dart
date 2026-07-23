@@ -56,11 +56,12 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
     final subtitle = isPvp
         ? 'Round Over'
         : 'Survived ${_formatClock(result?.survivedMs ?? 0)}';
+    final p = context.palette;
     final color = draw
-        ? const Color(0xFFFFC94D)
+        ? p.warning
         : won
-            ? const Color(0xFF4DD964)
-            : const Color(0xFFFF5555);
+            ? p.success
+            : p.danger;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -88,8 +89,7 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
               const SizedBox(height: 12),
               Text(
                 subtitle,
-                style: const TextStyle(
-                    fontSize: 16, color: AppColors.onSurfaceMuted),
+                style: TextStyle(fontSize: 16, color: p.onSurfaceMuted),
               ),
             ],
           ),

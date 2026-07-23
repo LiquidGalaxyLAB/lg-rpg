@@ -90,12 +90,13 @@ class _PlayerLobbyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
+        color: p.surfaceHigh,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: p.border),
       ),
       child: Row(
         children: [
@@ -103,14 +104,14 @@ class _PlayerLobbyTile extends StatelessWidget {
             width: 40,
             height: 40,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              gradient: AppGradients.primary,
+            decoration: BoxDecoration(
+              gradient: p.primaryGradient,
               shape: BoxShape.circle,
             ),
             child: Text(
               _initial,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: p.onPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
               ),
@@ -125,8 +126,8 @@ class _PlayerLobbyTile extends StatelessWidget {
                   player.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.onSurface,
+                  style: TextStyle(
+                    color: p.onSurface,
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
                   ),
@@ -134,9 +135,7 @@ class _PlayerLobbyTile extends StatelessWidget {
                 Text(
                   isHost ? 'Host' : 'Player',
                   style: TextStyle(
-                    color: isHost
-                        ? AppColors.primaryBright
-                        : AppColors.onSurfaceMuted,
+                    color: isHost ? p.primaryBright : p.onSurfaceMuted,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -165,10 +164,10 @@ class _TeamBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = team == PvpTeam.teamA
-        ? Colors.blueAccent
+        ? const Color(0xFF4C8DFF)
         : team == PvpTeam.teamB
-            ? Colors.redAccent
-            : AppColors.onSurfaceMuted;
+            ? const Color(0xFFFF5A5A)
+            : context.palette.onSurfaceMuted;
     final label = team == null ? 'Auto' : PvpTeam.label(team!);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
@@ -203,20 +202,22 @@ class _LobbyMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final p = context.palette;
 
+    // Scrollable so this can never overflow its fixed-height card, whatever the message length or font scale.
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.onSurfaceMuted, size: 30),
+            Icon(icon, color: p.onSurfaceMuted, size: 30),
             const SizedBox(height: 10),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.onSurfaceMuted,
+              style: TextStyle(
+                color: p.onSurfaceMuted,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -226,7 +227,7 @@ class _LobbyMessage extends StatelessWidget {
                 detail!,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall
-                    ?.copyWith(color: AppColors.onSurfaceMuted),
+                    ?.copyWith(color: p.onSurfaceMuted),
               ),
             ],
           ],
