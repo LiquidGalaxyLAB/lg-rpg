@@ -1,7 +1,7 @@
-// Overlay rendering for the game scene: PvP capture zones, heart pickups, and the pre-match waiting screen. Each helper takes the Phaser scene as its first argument so this logic can live outside the (large) scene class.
+// Overlay rendering for the game scene. Each helper takes the Phaser scene as its first argument, so this can live outside the (large) scene class.
 import { GAME_VIEW } from '../shared_constants.js';
 
-// Renders the PvP capture zones, team spawn boxes, and team markers under each player.
+// Capture zones, team spawn boxes, and the team marker under each player.
 export function drawPvp(scene) {
   const g = scene.pvpGraphics.clear();
   const pvp = scene.serverPvp;
@@ -57,21 +57,19 @@ export function drawHearts(scene) {
   }
 }
 
-// Displays a waiting overlay before the match starts, fading it in.
 export function showWaiting(scene) {
   if (scene.waitingObjects?.length) return;
   const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
   scene.waitingObjects = [
     scene.add.rectangle(w / 2, h / 2, w, h, 0x1a1a1a, 1).setDepth(9000),
     scene.add.text(w / 2, h / 2, 'Waiting for the match to start…', {
-      fontFamily: 'monospace', fontSize: '44px', color: '#ffffff', align: 'center', wordWrap: { width: w * 0.8 }
-    }).setOrigin(0.5).setDepth(9001)
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffffff', align: 'center', wordWrap: { width: w * 0.8 }
+    }).setOrigin(0.5).setDepth(9001).setResolution(3)
   ];
   scene.waitingObjects.forEach(obj => obj.setAlpha(0));
   scene.tweens.add({ targets: scene.waitingObjects, alpha: 1, duration: 500, ease: 'Sine.easeOut' });
 }
 
-// Fades the waiting overlay out, then destroys it.
 export function hideWaiting(scene) {
   const objects = scene.waitingObjects || [];
   if (!objects.length) return;

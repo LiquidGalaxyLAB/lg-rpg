@@ -1,10 +1,17 @@
 // Client-side game logic that renders the map, sprites, and UI using Phaser.
 import { GAME_VIEW, GAME_PHASES, SOCKET_EVENTS } from './shared_constants.js';
 import { drawPvp, drawHearts, showWaiting, hideWaiting } from './scene/overlays.js';
+import { createLeaderboard, updateLeaderboard, setLeaderboardAnnouncement } from './scene/leaderboard.js';
+import { initGameAudio } from './game_audio.js';
 import { createWeather, updateWeather } from './scene/weather.js';
-import { deathBurst, spillShards, healPopup, sparkleBurst, updateShieldFx, updateAuraFx } from './scene/effects.js';
+import { deathBurst, spillShards, healPopup, sparkleBurst, updateShieldFx, updateAuraFx, playAttackFx } from './scene/effects.js';
 
-// Parse the screen number parameter to determine this screen's role.
+// Map tile layers and decals render below every entity; the band is deep enough for any layer count.
+const MAP_DEPTH_BASE = -1000;
+
+// Visual-only boost over each manifest's render scale so characters read on the LG wall; server hitboxes are untouched, and projectiles are server-scaled instead.
+const ENTITY_SCALE_BOOST = 1.3;
+
 const urlParams = new URLSearchParams(window.location.search);
 const screenNumber = parseInt(urlParams.get('screen')) || 1;
 
@@ -21,24 +28,28 @@ const fetchJson = async (url) => {
   return res.json();
 };
 
-// Fetches configuration and assets, then starts the Phaser game instance.
+// Fetches config and assets, then starts the Phaser instance.
 async function startGame() {
   try {
     const configData = await fetchJson('/api/config');
     const mapConfig = configData.map;
 
-    if (!mapConfig?.key || !mapConfig?.path || !mapConfig?.layers?.ground) {
-      throw new Error('Game config is missing map key, path, or ground layer.');
+    if (!mapConfig?.key || !mapConfig?.path) {
+      throw new Error('Game config is missing the map key or path.');
     }
 
-    const mapScreens = Math.max(1, configData.totalScreens - 1);
+    // Every screen shows a slice of the map.
+    const mapScreens = configData.totalScreens;
     if (screenNumber < 1 || screenNumber > mapScreens) {
-      showScreenNotice(
-        screenNumber === configData.totalScreens
-          ? 'Leaderboard screen.\nOpen /right_screen.html here.'
-          : `Screen ${screenNumber} is out of range.\nGame screens are 1–${mapScreens}.`
-      );
+      showScreenNotice(`Screen ${screenNumber} is out of range.\nGame screens are 1–${mapScreens}.`);
       return;
+    }
+
+    // The last screen's machine is wired to the rig's speakers, so it plays the music and commentary.
+    if (screenNumber === configData.totalScreens) {
+      initGameAudio(socket).setMode(configData.selectedMode);
+    } else {
+      console.log(`[audio] screen ${screenNumber} is not the audio host (host is screen ${configData.totalScreens}) — silent by design.`);
     }
 
     const playersManifest = await fetchJson('assets/players/players.json');
@@ -59,7 +70,6 @@ async function startGame() {
       return def.textureKeyPrefix ?? def.textureKey;
     }
 
-    // Main Phaser game scene managing player, enemy, and heart entities.
     class LgRPG extends Phaser.Scene {
       constructor() {
         super('LgRPG');
@@ -74,16 +84,21 @@ async function startGame() {
         this.serverProjectiles = [];
       }
 
-      // Loads map JSON, tileset images, player spritesheets, and enemy spritesheets.
       preload() {
         this.load.tilemapTiledJSON(mapConfig.key, `assets/${mapConfig.path}`);
         (mapConfig.tilesets || []).forEach(t => this.load.image(t.key, `assets/${t.path}`));
+        (mapConfig.decals || []).forEach(d => this.load.image(d.key, `assets/${d.path}`));
         this.load.spritesheet('heart', 'assets/items/heart.png', { frameWidth: 16, frameHeight: 16 });
-        // Power-up FX: speed sparkles, shield/reflect bubbles, and the damage aura.
         this.load.spritesheet('fx:sparkle', 'assets/fx/boost_sparkles.png', { frameWidth: 53, frameHeight: 35 });
         this.load.spritesheet('fx:shield', 'assets/fx/shield_bubble_blue.png', { frameWidth: 24, frameHeight: 26 });
         this.load.spritesheet('fx:shield:reflect', 'assets/fx/shield_bubble_yellow.png', { frameWidth: 24, frameHeight: 26 });
         this.load.spritesheet('fx:aura', 'assets/fx/heal_aura.png', { frameWidth: 25, frameHeight: 24 });
+        // The swing is a 360° radial, so it gets the circular sweep rather than a directional arc; the rest are the water priestess's specials.
+        this.load.spritesheet('fx:swing', 'assets/fx/slash_circular.png', { frameWidth: 63, frameHeight: 55 });
+        this.load.spritesheet('fx:riptide', 'assets/fx/slash_multi.png', { frameWidth: 45, frameHeight: 30 });
+        this.load.spritesheet('fx:tide', 'assets/fx/water_pillar.png', { frameWidth: 30, frameHeight: 41 });
+        this.load.spritesheet('fx:frost', 'assets/fx/frost_nova.png', { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet('fx:blessing', 'assets/fx/spirit_blessing.png', { frameWidth: 32, frameHeight: 32 });
 
         if (configData.selectedMode === 'zombie') {
           this.load.spritesheet('rain', 'assets/fx/Rain.png', { frameWidth: 8, frameHeight: 8 });
@@ -119,7 +134,6 @@ async function startGame() {
         }
       }
 
-      // Prepares the map, tile layers, event listeners, and sprite animations.
       create() {
         const map = this.make.tilemap({ key: mapConfig.key, tileWidth: 16, tileHeight: 16 });
         const tilesets = (mapConfig.tilesets || [])
@@ -127,17 +141,28 @@ async function startGame() {
           .filter(Boolean);
         this.cameraOffset = (screenNumber - 1) * GAME_VIEW.screenWidth;
         this.mapLayers = [];
-        const layerNames = [...new Set(Object.values(mapConfig.layers || {}).filter(Boolean))];
-        layerNames.forEach((layerName, index) => {
-          const layer = map.createLayer(layerName, tilesets, -this.cameraOffset, 0);
+        // Every tile layer straight from the TMJ in file order, so a redrawn map never needs a maps.json update. `Divider` layers only mark screen borders in the editor. The negative depth band keeps tile layers from ever tying with hearts (1), pvp overlays (2) or sprites (depth = world y).
+        map.layers.forEach((layerData, index) => {
+          if (layerData.name.toLowerCase() === 'divider') return;
+          const layer = map.createLayer(layerData.name, tilesets, -this.cameraOffset, 0);
           if (layer) {
-            layer.setDepth(index);
+            layer.setDepth(MAP_DEPTH_BASE + index);
             this.mapLayers.push(layer);
-          } else {
-            console.warn(`Map layer not found: ${layerName}`);
           }
         });
-        // Drawn above the ground but below sprites (sprites use depth = world y).
+        // Static branding fitted into a Tiled object rectangle: the decal's `name` is the object layer, its first rectangle is the box, and the image is contained (never stretched) and centred inside.
+        (mapConfig.decals || []).forEach(d => {
+          const box = map.getObjectLayer(d.name)?.objects?.[0];
+          if (!box) { console.warn(`Decal box not found: ${d.name}`); return; }
+          const img = this.add.image(0, 0, d.key).setOrigin(0.5);
+          const scale = Math.min(box.width / img.width, box.height / img.height);
+          img.setDisplaySize(img.width * scale, img.height * scale);
+          img.setPosition(box.x + box.width / 2 - this.cameraOffset, box.y + box.height / 2);
+          img.setDepth(MAP_DEPTH_BASE + map.layers.length);
+        });
+        // Framed by the map's `leaderboard` object rectangle; only drawn by screens whose slice overlaps it.
+        createLeaderboard(this, map, configData);
+        // Above the ground but below sprites (which use depth = world y).
         this.pvpGraphics = this.add.graphics().setDepth(2);
         if (configData.selectedMode === 'zombie') {
           createWeather(this);
@@ -163,6 +188,18 @@ async function startGame() {
           frames: this.anims.generateFrameNumbers('fx:aura', { start: 0, end: 4 }),
           frameRate: 8, repeat: -1,
         });
+        // One-shot attack FX in the same 8-12fps band as the buffs above, so they read as deliberate. Matching the server's damage windows exactly made them too fast to see, so the FX is allowed to outlast its ability.
+        [
+          { key: 'fx:swing', frames: 6, frameRate: 12 },
+          { key: 'fx:tide', frames: 9, frameRate: 11 },
+          { key: 'fx:riptide', frames: 6, frameRate: 12 },
+          { key: 'fx:frost', frames: 10, frameRate: 12 },
+          { key: 'fx:blessing', frames: 5, frameRate: 7 },
+        ].forEach(fx => this.anims.create({
+          key: `${fx.key}:play`,
+          frames: this.anims.generateFrameNumbers(fx.key, { start: 0, end: fx.frames - 1 }),
+          frameRate: fx.frameRate, repeat: 0,
+        }));
 
         socket.on(SOCKET_EVENTS.GAME_STATE, d => {
           this.serverPlayers = d.players || [];
@@ -173,14 +210,20 @@ async function startGame() {
           this.serverPvp = d.pvp || null;
         });
 
-        socket.on(SOCKET_EVENTS.GAME_OVER, () => {
+        socket.on(SOCKET_EVENTS.GAME_OVER, d => {
           this.phase = GAME_PHASES.LOBBY;
+          this.serverFinal = d || null;
           showWaiting(this);
+        });
+
+        socket.on(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, (d = {}) => {
+          if (d.message) setLeaderboardAnnouncement(this, d.message, d.durationMs);
         });
 
         socket.on(SOCKET_EVENTS.GAME_STARTED, d => {
           if (d?.map?.key && d.map.key !== mapConfig.key) return window.location.reload();
           this.phase = GAME_PHASES.PLAYING;
+          this.serverFinal = null;
           hideWaiting(this);
         });
 
@@ -245,7 +288,6 @@ async function startGame() {
         }
       }
 
-      // Syncs player and enemy sprites with server updates every frame.
       update(_time, delta) {
         this.syncSprites(this.serverPlayers, this.playerSprites, 'playerId', p => this.resolvePlayerConfig(p));
         if (enemiesManifest) {
@@ -254,10 +296,10 @@ async function startGame() {
         this.syncProjectiles();
         drawHearts(this);
         drawPvp(this);
+        updateLeaderboard(this);
         if (this.rainDrops) updateWeather(this, delta / 1000);
       }
 
-      // Resolves the asset configuration and animations for a player.
       resolvePlayerConfig(entity) {
         const key = entity?.character ?? playersManifest.defaultPlayer;
         const def = resolvePlayerDefinition(key);
@@ -271,11 +313,10 @@ async function startGame() {
             death: anims.death ? `${prefix}:death` : null,
             hurt: anims.take_hit ? `${prefix}:take_hit` : anims.hurt ? `${prefix}:hurt` : null,
           },
-          scale: def.render.scale, origin: def.render.origin, bodyHeight: def.render.bodyHeight ?? null,
+          scale: def.render.scale * ENTITY_SCALE_BOOST, origin: def.render.origin, bodyHeight: def.render.bodyHeight ?? null,
         };
       }
 
-      // Resolves the asset configuration and animations for an enemy.
       resolveEnemyConfig(enemy) {
         const def = enemiesManifest.enemies[enemy.type];
         const prefix = def.textureKeyPrefix, anims = def.animations;
@@ -288,11 +329,11 @@ async function startGame() {
             death: anims.death ? `${prefix}:death` : null,
             hurt: anims.take_hit ? `${prefix}:take_hit` : anims.hurt ? `${prefix}:hurt` : null,
           },
-          scale: def.render.scale, origin: def.render.origin,
+          scale: def.render.scale * ENTITY_SCALE_BOOST, origin: def.render.origin,
         };
       }
 
-      // Average body color of an entity's spritesheet (first frame), cached per texture, so shards match what they burst from.
+      // Average body color of the sheet's first frame, cached per texture, so shards match what they burst from.
       entityColor(textureKey) {
         this.colorCache ??= new Map();
         if (!this.colorCache.has(textureKey)) {
@@ -320,7 +361,6 @@ async function startGame() {
         return x > -GAME_VIEW.fadeZone && x < GAME_VIEW.screenWidth + GAME_VIEW.fadeZone;
       }
 
-      // Flies bombs along their arc and plays the explosion when they land.
       syncProjectiles() {
         const active = new Set();
         for (const proj of this.serverProjectiles) {
@@ -330,7 +370,7 @@ async function startGame() {
           if (!sprite) {
             sprite = this.add.sprite(localX, proj.y, proj.sprite, 0).setScale(proj.scale ?? 0.8).setDepth(proj.y + 40);
             sprite.exploded = false;
-            // Point the bolt along its flight heading (art faces right at angle 0).
+            // Art faces right at angle 0.
             if (proj.angle != null) sprite.setRotation(proj.angle);
             sprite.play(`${proj.sprite}:spin`);
             this.projectileSprites.set(proj.id, sprite);
@@ -356,7 +396,7 @@ async function startGame() {
         }
       }
 
-      // Updates sprite positions, plays animations, and manages visibility based on server state.
+      // Reconciles sprite position, animation and visibility against the server state.
       syncSprites(list, spriteMap, idKey, resolve) {
         const screenW = GAME_VIEW.screenWidth, fade = GAME_VIEW.fadeZone;
         const isFirst = screenNumber === 1, isLast = screenNumber >= mapScreens;
@@ -387,11 +427,14 @@ async function startGame() {
           }
 
           const actions = sprite.cfg.actions;
-          if (entity.action && actions && sprite.lastAction !== entity.action) {
-            sprite.lastAction = entity.action;
+          // Two swings in a row are both 'attack', so the FX edge keys on the pair; the server nulls `action` between them.
+          const actionSig = entity.action ? `${entity.action}:${entity.actionKind ?? ''}` : null;
+          if (entity.action && actions && sprite.lastAction !== actionSig) {
+            sprite.lastAction = actionSig;
             let key = null;
             if (entity.action === 'attack' && actions.attack?.length) {
               key = actions.attack[Math.floor(Math.random() * actions.attack.length)];
+              if (idKey === 'playerId') playAttackFx(this, entity.actionKind, localX, entity.y, sprite);
             } else if (entity.action === 'throw' && actions.throw) {
               key = actions.throw;
             } else if (entity.action === 'death') {
@@ -420,10 +463,13 @@ async function startGame() {
           const dx = entity.x - sprite.wx, dy = entity.y - sprite.wy;
           sprite.wx = entity.x; sprite.wy = entity.y;
 
+          // Enemies square up to the target even mid-animation, so a stationary slime never swings facing away.
+          if (entity.face && !entity.dead && entity.action !== 'death') sprite.setFlipX(entity.face < 0);
+
           if (!locked) {
             if (dx * dx + dy * dy > 0.25) {
               sprite.still = 0;
-              if (Math.abs(dx) > 0.1) sprite.setFlipX(dx < 0);
+              if (!entity.face && Math.abs(dx) > 0.1) sprite.setFlipX(dx < 0);
             } else {
               sprite.still++;
             }
@@ -440,29 +486,28 @@ async function startGame() {
           sprite.setAlpha(Phaser.Math.Clamp(alpha, 0, 1)).setTint(
             entity.dead ? 0x777777
               : this.time.now < (sprite.hurtTintUntil || 0) ? 0xd63b3b
-              : this.time.now < (sprite.healTintUntil || 0) ? 0x5bffa0
-              : entity.boost ? 0x8fe3ff
-              : entity.power ? 0xff8fd0
-              : 0xffffff,
+                : this.time.now < (sprite.healTintUntil || 0) ? 0x5bffa0
+                  : entity.boost ? 0x8fe3ff
+                    : entity.power ? 0xff8fd0
+                      : 0xffffff,
           );
 
           const visible = localX > -fade && localX < screenW + fade;
           sprite.setVisible(visible).setDepth(entity.y);
           this.drawHealthBar(sprite, entity, localX, visible, idKey);
           if (idKey === 'playerId') {
-            // Detect a heal (hearts or potions raise HP) and pop a green "+N" + flash. Guard against the respawn HP reset (was dead / HP was 0).
+            // A heal pops a green "+N" and flash; the guards keep the respawn HP reset from counting as one.
             if (sprite.lastHp != null && sprite.lastHp > 0 && !entity.dead && entity.hp > sprite.lastHp) {
               if (visible) healPopup(this, localX, entity.y);
               sprite.healTintUntil = this.time.now + 350;
             }
             sprite.lastHp = entity.hp;
-            // Speed boost: one sparkle burst on activation, plus the glow tint above.
+            // One sparkle burst on activation, plus the glow tint above.
             if (entity.boost && !entity.dead) {
               if (!sprite.boosted) { sprite.boosted = true; sparkleBurst(this, localX, entity.y, sprite, 16, -10); }
             } else {
               sprite.boosted = false;
             }
-            // Shield/reflect bubble and the damage aura track the player each frame.
             updateShieldFx(this, sprite, entity, localX, visible);
             updateAuraFx(this, sprite, entity, localX, visible);
           }
@@ -474,13 +519,14 @@ async function startGame() {
             sprite.hpBar.destroy();
             if (sprite.shieldFx) sprite.shieldFx.destroy();
             if (sprite.auraFx) sprite.auraFx.destroy();
+            if (sprite.attackFx) sprite.attackFx.destroy();
             sprite.destroy();
             spriteMap.delete(id);
           }
         }
       }
 
-      // Draws a health bar above a player or damaged enemy.
+      // Players always show a bar; enemies only once damaged.
       drawHealthBar(sprite, entity, localX, visible, idKey) {
         const g = sprite.hpBar.clear();
         const hp = entity.hp, max = entity.maxHp;
@@ -492,7 +538,7 @@ async function startGame() {
         const bodyTop = sprite.cfg.bodyHeight != null ? sprite.cfg.bodyHeight * sprite.scaleY : sprite.displayHeight * sprite.originY;
         const top = entity.y - bodyTop - 12;
         const frac = Phaser.Math.Clamp(hp / max, 0, 1);
-        // Enemies always red; players go green with the low-HP warning stages kept.
+        // Enemies always red; players go green through the low-HP warning stages.
         const color = idKey !== 'playerId' ? 0xe0394c
           : frac > 0.5 ? 0x5f7160 : frac > 0.25 ? 0xffcc00 : 0xdd3333;
 
@@ -500,10 +546,8 @@ async function startGame() {
         g.fillStyle(color, 1).fillRect(localX - w / 2, top, w * frac, h);
         g.setDepth(entity.y + 1).setVisible(true);
       }
-
     }
 
-    // Phaser engine configuration settings.
     const config = {
       type: Phaser.WEBGL,
       width: GAME_VIEW.screenWidth, height: GAME_VIEW.screenHeight,
