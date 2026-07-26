@@ -1,30 +1,29 @@
-// Defines AI commentator configurations, personas, and prompts for text generation.
+// Model config, personas and prompts for the AI commentators.
 
-// Gemini AI model version used for text generation.
 export const MODELS = Object.freeze({
   text: 'gemini-3-flash-preview',
 });
 
-// Microsoft Edge TTS voice names for the two AI commentators .
+// Edge TTS voice names for the two commentators.
 export const VOICES = Object.freeze({
   Curly: 'en-US-AriaNeural',
   Julie: 'en-US-JennyNeural',
 });
 
-// Formats the per-player roster line shared by both modes.
+// Per-player roster lines, shared by both modes.
 function rosterLines(players) {
   if (!players.length) return '  No players listed';
   return players
     .map((p) => {
       const health = Number.isFinite(Number(p.hp)) ? Number(p.hp) : 0;
-      const maxhealth = Number.isFinite(Number(p.maxHp)) ? Number(p.maxHp) : 100;
+      // Mirror the reported max rather than hardcoding one, which would drift the moment PLAYER_DEFAULTS.maxHealth is retuned.
+      const maxhealth = Number.isFinite(Number(p.maxHp)) ? Number(p.maxHp) : health;
       const team = p.team ? `, team ${p.team === 'teamA' ? 'Blue' : 'Red'}` : '';
       return `  ${p.name}: health ${health}/${maxhealth}, kills ${p.kills || 0}${team}, status: ${p.status || 'unknown'}`;
     })
     .join('\n');
 }
 
-// Build a summary of the current match state.
 export function buildSummary(ctx = {}) {
   const { mode = 'Zombie Mode', modeId = 'zombie', players = [], recentEvent = 'no major event' } = ctx;
   const playerLines = rosterLines(players);
@@ -38,7 +37,7 @@ export function buildSummary(ctx = {}) {
     stateLines =
       `${phaseLine}\n` +
       `Score — Blue ${s.teamA ?? 0} : Red ${s.teamB ?? 0}\n` +
-      `Circle held by: ${held.teamA ? 'Blue' : held.teamB ? 'Red' : 'no one'}`;
+      `Circle held by: ${held.teamA > 0 ? 'Blue' : held.teamB > 0 ? 'Red' : 'no one (contested or empty)'}`;
   } else {
     const phaseLine =
       ctx.phase === 'grace'
@@ -61,14 +60,22 @@ export function buildSummary(ctx = {}) {
 const ZOMBIE_FACTS =
   `- Mode: Zombie Mode — a co-op survival fight. After a 30-second warm-up, the squad must survive 3 minutes of combat.
 - When the 3-minute survive timer hits 0, a dragon boss is summoned. Win = slay the dragon (the whole squad wins, including fallen players). Loss = every player hits 0 health first.
-- Enemies spawn continuously (starts up to 25 on the map, cap rises ~11 each minute). Kill one and another spawns — the horde never clears.
-- 1 to 4 players, all on the same side.`;
+- Enemies spawn continuously (up to 9 on the map at first, rising by 4 each minute to a cap of 24). Kill one and another spawns — the horde never clears.
+- 1 to 4 players, all on the same side. Kills are the co-op ranking metric.`;
 
 const PVP_FACTS =
-  `- Mode: PvP Zone Capture — two teams, Blue and Red, fight over one capture circle (a different spot each match).
-- Each team spawns on its own side and races to the circle. A team earns 1 point for every 6 seconds only it is standing in the circle.
-- Downed players respawn at their own side after a few seconds. Win = the higher team score when the round timer ends; equal scores = a draw.
+  `- Mode: PvP Zone Capture — two teams, Blue and Red, fight over one capture circle in the middle of the arena.
+- Each team spawns on its own side and races to the circle. A team earns 1 point for every 6 seconds only it is standing in the circle — a contested circle (both teams inside) scores for nobody.
+- Kills do NOT score. Downing an opponent only clears the circle for a few seconds; never call a kill a point or say kills are winning the round.
+- The round lasts 2 minutes. Downed players respawn at their own side after about 4 seconds, briefly invulnerable.
+- Win = the higher team score when the round timer ends; equal scores = a draw.
 - Reference teams as Blue and Red.`;
+
+// Systems both modes share, so the booth can call out a shield or a special instead of only health and kills.
+const LOADOUT_FACTS =
+  `- Each player picks a character (Huntress, a ranged archer; Water Priestess, a melee bruiser) and carries up to 4 loadout items.
+- Loadout items are cooldown-gated, not consumed: Speed (1.8x move), Shield (8s immunity), Reflect (half damage, bounced back doubled), 2x Damage, and healing potions (+25/+50/+90 HP).
+- Players start at 100 health.`;
 
 const SHARED_FACTS =
   `- Player names, health, kills, scores, time, and enemy counts come ONLY from the MATCH STATE below. Never invent or change a name or number.
@@ -77,7 +84,7 @@ const SHARED_FACTS =
 
 // Builds the full GAME FACTS block for the active mode.
 function gameFacts(modeId) {
-  return `GAME FACTS (never contradict these):\n${modeId === 'pvp' ? PVP_FACTS : ZOMBIE_FACTS}\n${SHARED_FACTS}`;
+  return `GAME FACTS (never contradict these):\n${modeId === 'pvp' ? PVP_FACTS : ZOMBIE_FACTS}\n${LOADOUT_FACTS}\n${SHARED_FACTS}`;
 }
 
 // Personalities and dialogue constraints for each commentator.
@@ -87,7 +94,6 @@ Curly: hype and emotional — reacts to momentum, stays hopeful or worried based
 Julie: dry analyst — always replies DIRECTLY to what Curly just said, works the real numbers (health, time, score, enemy pressure) into natural speech.
 Rules: warm, witty, never mean. Max 12 words per line. No filler openers (Oh / Wow / Well / Ah).`;
 
-// Generates the AI prompt for the match starting announcement.
 export function introPrompt(summary, modeId = 'zombie') {
   return (
     `${STYLE}\n\n${gameFacts(modeId)}\n\n` +
@@ -100,7 +106,7 @@ export function introPrompt(summary, modeId = 'zombie') {
   );
 }
 
-// Generates the AI prompt for mid-game dialogue based on recent events and history.
+// Mid-game dialogue, built from recent events plus the booth's own history.
 export function banterPrompt(summary, transcript, modeId = 'zombie') {
   const memory = transcript?.length
     ? `Recent booth lines (don't repeat these):\n${transcript.join('\n')}\n\n`

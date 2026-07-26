@@ -1,17 +1,19 @@
-import { ENEMY_SPAWN, GAME_PHASES, MATCH, PLAYER_DEFAULTS, SOCKET_EVENTS } from '../game_constants.js';
+import { ENEMY_SPAWN, GAME_MODES, GAME_PHASES, MATCH, PLAYER_DEFAULTS, SOCKET_EVENTS } from '../game_constants.js';
 import { io } from './app.js';
 import { state } from './state.js';
 import { emitGameEvent } from './cheerleader-bridge.js';
 
-// Resets all player stats and starts a new match.
+// Resets every player's stats and starts a new match.
 export function startMatchState() {
   state.matchStartedAt = Date.now();
   state.matchActive = state.activeMode !== null;
+  state.lastTeamScores = null;
   for (const player of state.players.values()) {
     player.health = PLAYER_DEFAULTS.maxHealth;
     player.maxHealth = PLAYER_DEFAULTS.maxHealth;
     player.dead = false;
     player.action = null;
+    player.actionKind = null;
     player.actionExpiresAt = 0;
     player.kills = 0;
     player.lastAttackAt = 0;
@@ -21,11 +23,24 @@ export function startMatchState() {
   }
 }
 
-// Ends the match, stops active game elements, and sends results; result is null for co-op, set for PvP team modes.
+// Snapshots team scores before the mode is dropped, so a match ending after teardown (empty-lobby grace) still reports the round it played.
+export function captureTeamScores() {
+  if (typeof state.activeMode?.getScores === 'function') {
+    state.lastTeamScores = state.activeMode.getScores();
+  }
+}
+
+// Stops active game elements and sends results; `result` is null for co-op, set for PvP team modes.
 export function endMatch(reason = 'all-dead', result = null) {
-  const outcome = reason === 'timer-win' || reason === 'boss-defeated' ? 'win' : 'loss';
+  const outcome = reason === 'boss-defeated' ? 'win' : 'loss';
   state.matchActive = false;
   cancelEmptyGrace();
+  // PvP rounds can end outside checkMatchEnd (everyone left, host teardown) with no result, so build one from the live scores — otherwise the boards fall back to the co-op layout.
+  captureTeamScores();
+  const teamResult = result
+    || (state.selectedMode === GAME_MODES.PVP && state.lastTeamScores
+      ? { winner: null, scores: state.lastTeamScores }
+      : null);
   if (state.activeMode) {
     state.activeMode.stop();
     state.activeMode = null;
@@ -35,32 +50,43 @@ export function endMatch(reason = 'all-dead', result = null) {
     state.heartField = null;
   }
   state.phase = GAME_PHASES.LOBBY;
+  // Carry health through so the final board can show who was still standing instead of assuming full HP.
   const results = Array.from(state.players.values())
-    .map((p) => ({ playerId: p.playerId, name: p.name, kills: p.kills || 0, team: p.team || null }))
+    .map((p) => ({
+      playerId: p.playerId,
+      name: p.name,
+      kills: p.kills || 0,
+      team: p.team || null,
+      hp: p.health,
+      maxHp: p.maxHealth,
+      dead: !!p.dead,
+    }))
     .sort((a, b) => b.kills - a.kills);
   // Exclude the enemy-free warmup window so co-op "Survived" reflects combat time.
   const rawMs = Date.now() - state.matchStartedAt;
-  const survivedMs = result ? rawMs : Math.max(0, rawMs - ENEMY_SPAWN.warmupMs);
-  const cheerEvent = result ? 'match_won' : outcome === 'win' ? 'match_won' : 'match_lost';
-  // PvP results carry the winner and score so the commentator announces them correctly.
+  const survivedMs = teamResult ? rawMs : Math.max(0, rawMs - ENEMY_SPAWN.warmupMs);
+  // A draw gets its own event rather than a "won" one the commentator has to walk back.
+  const cheerEvent = teamResult
+    ? (teamResult.winner ? 'match_won' : 'match_draw')
+    : outcome === 'win' ? 'match_won' : 'match_lost';
   emitGameEvent(cheerEvent, {
     survivedMs,
     results,
-    ...(result ? { winner: result.winner, scores: result.scores } : {}),
+    ...(teamResult ? { winner: teamResult.winner, scores: teamResult.scores } : {}),
   });
   const finishingCheer = state.cheerleader;
   state.cheerleader = null;
   if (finishingCheer) {
     finishingCheer.finale().finally(() => finishingCheer.stop());
   }
-  const payload = result
-    ? { reason, winner: result.winner, scores: result.scores, survivedMs, results }
+  const payload = teamResult
+    ? { reason, winner: teamResult.winner, scores: teamResult.scores, survivedMs, results }
     : { reason, outcome, survivedMs, results };
   io.emit(SOCKET_EVENTS.GAME_OVER, payload);
-  console.log(`[game] match over (${reason}). ${result ? `winner=${result.winner}` : outcome}, survived ${survivedMs}ms`);
+  console.log(`[game] match over (${reason}). ${teamResult ? `winner=${teamResult.winner ?? 'draw'}` : outcome}, survived ${survivedMs}ms`);
 }
 
-// Starts a countdown to end the match when the last player leaves.
+// Counts down to ending the match after the last player leaves.
 export function scheduleEmptyGrace() {
   if (state.emptyGraceTimer) return;
   io.emit(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, {
@@ -74,7 +100,6 @@ export function scheduleEmptyGrace() {
   }, MATCH.emptyGraceMs);
 }
 
-// Stops the countdown to end the match.
 export function cancelEmptyGrace() {
   if (state.emptyGraceTimer) {
     clearTimeout(state.emptyGraceTimer);
@@ -82,7 +107,7 @@ export function cancelEmptyGrace() {
   }
 }
 
-// Removes a player from the game and updates host status if they were host.
+// Removes a player and hands off host status if they held it.
 export function removePlayer(playerId, socketId) {
   const removed = state.players.get(playerId);
   state.players.delete(playerId);
@@ -92,8 +117,8 @@ export function removePlayer(playerId, socketId) {
     state.players.values().next().value.isHost = true;
   }
 
-
   if (state.players.size === 0 && state.activeMode) {
+    captureTeamScores();
     state.activeMode.stop();
     state.activeMode = null;
     state.matchActive = false;
