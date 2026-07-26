@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { GAME_VIEW, SERVER_CONFIG } from '../../game_constants.js';
 import { createCollisionGrid } from './collision.js';
 
 const GID_MASK = 0x0fffffff;
 
-// Finds an object layer with the specified name in a Tiled map structure.
+// Recurses through Tiled group layers to find a named object layer.
 function findObjectLayer(layers, name) {
   for (const layer of layers) {
     if (layer.type === 'objectgroup' && layer.name === name) return layer;
@@ -16,10 +17,9 @@ function findObjectLayer(layers, name) {
   return null;
 }
 
-// Extracts non-empty rectangle/ellipse objects from a Tiled object layer.
+// Non-empty rectangle/ellipse objects from a Tiled object layer.
 function extractRects(layer) {
   if (!layer) return [];
-  // Filter out invalid sizes and map to simplified rectangle structures
   return layer.objects
     .filter((o) => o.width > 0 && o.height > 0)
     .map((o) => ({ x: o.x, y: o.y, width: o.width, height: o.height, ellipse: o.ellipse === true }));
@@ -155,19 +155,18 @@ function buildCollision(tmjPath, tmj) {
   };
 }
 
-// Loads and parses a Tiled map JSON file to extract pixel dimensions and configured zones.
+// Parses a Tiled map into pixel bounds, logical zones and a collision grid.
 export function loadMap(publicDir, mapConfig) {
-  // Read and parse the TMJ map file from the public assets directory
   const tmjPath = path.join(publicDir, 'assets', mapConfig.path);
   const tmj = JSON.parse(fs.readFileSync(tmjPath, 'utf8'));
 
-  // Calculate the total map dimensions in pixels
+  // Capped to what the screens display: tile counts round up, so the last partial column is offscreen and must stay unwalkable.
+  const displayedWidth = GAME_VIEW.screenWidth * SERVER_CONFIG.totalScreens;
   const bounds = {
-    width: tmj.width * tmj.tilewidth,
-    height: tmj.height * tmj.tileheight,
+    width: Math.min(tmj.width * tmj.tilewidth, displayedWidth),
+    height: Math.min(tmj.height * tmj.tileheight, GAME_VIEW.screenHeight),
   };
 
-  // Map requested tiled layers to logical zones
   const objectLayers = mapConfig.objectLayers || {};
   const zones = {};
   for (const [logicalName, tiledName] of Object.entries(objectLayers)) {

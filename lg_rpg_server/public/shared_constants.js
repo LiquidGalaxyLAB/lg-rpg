@@ -29,31 +29,38 @@ export const GAME_PHASES = Object.freeze({
   PLAYING: 'playing',
 });
 
-// Per-screen view, in world pixels. fadeZone is the cross-screen fade width.
+// Per-screen view in world pixels; 360x640 upscales exactly 3x to a 1080x1920 screen. fadeZone is the cross-screen fade width.
 export const GAME_VIEW = Object.freeze({
-  screenWidth: 1080,
-  screenHeight: 1920,
-  fadeZone: 20,
+  screenWidth: 360,
+  screenHeight: 640,
+  fadeZone: 7,
 });
 
-// Loadout system, shared by controller and server: pick a character, fill LOADOUT_SLOTS with items.
+// Maps are drawn on a 16px grid, so a screen spans 22.5 tiles and screen boundaries fall mid-tile.
+export const MAP_TILE_SIZE = 16;
 
+// Tile columns a map needs to cover every screen; the rounded-up spare columns stay offscreen.
+export const mapTilesForScreens = (screens) => Math.ceil((GAME_VIEW.screenWidth * screens) / MAP_TILE_SIZE);
+
+// Loadout system, shared by controller and server: pick a character, fill LOADOUT_SLOTS with items.
 export const LOADOUT_SLOTS = 4;
 
-// How long before an active buff's end the client blinks it as "about to expire".
+// How long before a buff ends that the client blinks it as "about to expire".
 export const POWERUP_BLINK_MS = 2000;
 
-// Power-ups: infinite use, cooldown-gated. durationMs = buff length, cooldownMs = wait to re-use.
+// Infinite use, cooldown-gated. durationMs = buff length, cooldownMs = wait to re-use.
 export const POWERUP_CATALOG = Object.freeze([
+  // 1.8× still outruns every enemy without being a teleport; 2.9× crossed a screen in 1.6s.
   Object.freeze({ id: 'speed', label: 'Speed', icon: '⚡',
-    desc: '2.9× move speed for 10s — kite and reposition fast.',
-    durationMs: 10000, cooldownMs: 25000, multiplier: 2.9 }),
+    desc: '1.8× move speed for 10s — kite and reposition fast.',
+    durationMs: 10000, cooldownMs: 25000, multiplier: 1.8 }),
+  // Deliberately not chainable into permanent immunity: one short window, and reflect is a damage-share.
   Object.freeze({ id: 'shield', label: 'Shield', icon: '🛡',
-    desc: 'Immune to all enemy damage for 15s.',
-    durationMs: 15000, cooldownMs: 35000 }),
+    desc: 'Immune to all enemy damage for 8s.',
+    durationMs: 8000, cooldownMs: 45000 }),
   Object.freeze({ id: 'reflect', label: 'Reflect', icon: '↩',
-    desc: 'Take no damage and bounce it back doubled for 15s.',
-    durationMs: 15000, cooldownMs: 40000, multiplier: 2 }),
+    desc: 'Take half damage and bounce it back doubled for 10s.',
+    durationMs: 10000, cooldownMs: 40000, multiplier: 2, reduction: 0.5 }),
   Object.freeze({ id: 'power', label: '2× Damage', icon: '💥',
     desc: 'Double your attack damage for 10s.',
     durationMs: 10000, cooldownMs: 30000, multiplier: 2 }),
@@ -84,13 +91,16 @@ export const CHARACTER_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'water_priestess', displayName: 'Water Priestess', role: 'Attacker',
-    blurb: 'Melee bruiser. Swings hit everything up close. Specials coming soon.',
+    blurb: 'Melee bruiser. Swings hit everything up close; specials cover burst, reach and sustain.',
     basic: Object.freeze({ id: 'melee', label: 'Swing', icon: '🗡' }),
+    // Heavier swing than the shared default (15/45).
+    melee: Object.freeze({ damage: 20, range: 55 }),
+    // Each special covers something the 360° swing can't do; numbers mirror PLAYER_SPECIALS in game_constants.js.
     specials: Object.freeze([
-      Object.freeze({ id: 'tide', label: 'Tide Slam', icon: '🌊', cooldownMs: 4000, stub: true, desc: 'Reserved — swings for now.' }),
-      Object.freeze({ id: 'riptide', label: 'Riptide', icon: '💧', cooldownMs: 4000, stub: true, desc: 'Reserved — swings for now.' }),
-      Object.freeze({ id: 'frost', label: 'Frost Nova', icon: '❄', cooldownMs: 5000, stub: true, desc: 'Reserved — swings for now.' }),
-      Object.freeze({ id: 'blessing', label: 'Blessing', icon: '✨', cooldownMs: 6000, stub: true, desc: 'Reserved — swings for now.' }),
+      Object.freeze({ id: 'tide', label: 'Tide Slam', icon: '🌊', cooldownMs: 4000, desc: 'Three slams in place — 90 damage to everything in reach.' }),
+      Object.freeze({ id: 'riptide', label: 'Riptide', icon: '💧', cooldownMs: 4000, desc: 'Dash forward, cutting through everything you pass.' }),
+      Object.freeze({ id: 'frost', label: 'Frost Nova', icon: '❄', cooldownMs: 5000, desc: 'Three novas at double reach — halves enemy speed for 3s.' }),
+      Object.freeze({ id: 'blessing', label: 'Blessing', icon: '✨', cooldownMs: 6000, desc: 'Heal 30, and nearby enemies hit everyone for half for 6s.' }),
     ]),
   }),
 ]);
