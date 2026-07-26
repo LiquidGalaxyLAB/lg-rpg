@@ -43,6 +43,11 @@ for idx in "${!PHYSICAL_SCREENS[@]}"; do
 
   BROWSER_CMD="DISPLAY=:0 chromium-browser \
     --autoplay-policy=no-user-gesture-required \
+    --incognito \
+    --force-device-scale-factor=1 \
+    --disable-session-crashed-bubble \
+    --disable-infobars \
+    --hide-scrollbars \
     --ignore-gpu-blocklist \
     --enable-gpu-rasterization \
     --enable-zero-copy \
