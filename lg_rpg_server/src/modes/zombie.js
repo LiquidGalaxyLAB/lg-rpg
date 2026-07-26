@@ -1,4 +1,4 @@
-// Handles the Zombie game mode logic, including spawning, movement, and combat for enemies.
+// Zombie mode: enemy spawning, movement and combat.
 
 import {
   ENEMY_COMBAT,
@@ -14,13 +14,15 @@ import { PlayerProjectiles } from '../lib/player-projectiles.js';
 import { state } from '../state.js';
 import { emitGameEvent } from '../cheerleader-bridge.js';
 
-// Combines default enemy stats with any type-specific overrides.
+// Default enemy stats merged with any type-specific overrides.
 function resolveStats(pick) {
   return {
     speed: pick.speed ?? ENEMY_MOVEMENT.speed,
     aggroRange: pick.aggroRange ?? ENEMY_MOVEMENT.aggroRange,
     leashMultiplier: pick.leashMultiplier ?? ENEMY_MOVEMENT.leashMultiplier,
     commitForLife: pick.commitForLife ?? ENEMY_MOVEMENT.commitForLife,
+    // Re-picks the closest player every tick (boss behavior) instead of locking one target.
+    retargetNearest: pick.retargetNearest ?? false,
     // Fliers skip the pathfinder/collision and drift straight through the world toward their target.
     flies: pick.flies ?? false,
     knockbackResist: pick.knockbackResist ?? false,
@@ -74,10 +76,20 @@ function hitboxesWithinRange(a, b, range) {
   return distanceSqBetweenHitboxes(a, b) <= range * range;
 }
 
+// Effective move speed, cut while a Frost Nova slow is running.
+function enemySpeed(enemy, now) {
+  return (enemy.slowUntil || 0) > now ? enemy.stats.speed * enemy.slowMultiplier : enemy.stats.speed;
+}
+
+// Effective outgoing damage, cut while a Blessing weaken is running.
+function enemyDamage(enemy, base, now) {
+  return (enemy.weakenUntil || 0) > now ? Math.round(base * enemy.weakenMultiplier) : base;
+}
+
 function damageEnemy(enemy, damage) {
   enemy.health -= damage;
   if (enemy.health > 0) {
-    // Signal a hit animation; kept until expiry so the broadcast picks it up.
+    // Kept until expiry so the broadcast picks the hit animation up.
     enemy.action = 'take_hit';
     enemy.actionExpiresAt = Date.now() + ENEMY_COMBAT.actionSignalMs;
     return false;
@@ -96,12 +108,14 @@ export class ZombieMode {
     this.bounds = map.bounds;
     this.collision = map.collision;
     this.zones = map.zones.enemySpawn || [];
+    // Boss-only types use their own drawn zone so the dragon always makes its entrance where the map intends.
+    this.bossZones = map.zones.bossSpawn || [];
     this.enemies = new Map();
     this.projectiles = new Map();
     this.playerShots = new PlayerProjectiles(map.bounds);
     this.nextId = 1;
     this.nextProjectileId = 1;
-    // Boss fight: the dragon is summoned once at the survive mark; killing it wins the match.
+    // The dragon is summoned once at the survive mark; killing it wins the match.
     this.bossSpawned = false;
     this.bossAnnounced = false;
     this.bossId = null;
@@ -110,7 +124,6 @@ export class ZombieMode {
     this.spawnStartedAt = 0;
     // Latest player snapshot, refreshed each tick, so spawning can bias toward nearby players.
     this.activePlayers = [];
-    // Pathfinder instance for navigation.
     this.pathfinder = createPathfinder({
       bounds: this.bounds,
       collision: this.collision,
@@ -119,7 +132,7 @@ export class ZombieMode {
     });
   }
 
-  // Calculates the spawn interval, decreasing over time.
+  // Shortens over time, floored at minIntervalMs.
   spawnInterval() {
     const elapsedMs = Date.now() - this.spawnStartedAt;
     return Math.max(
@@ -128,7 +141,7 @@ export class ZombieMode {
     );
   }
 
-  // Calculates the maximum number of enemies allowed on the map.
+  // Max enemies on the map, ramping up over time to capCeiling.
   currentCap() {
     const elapsedMs = Date.now() - this.spawnStartedAt;
     return Math.min(
@@ -137,7 +150,6 @@ export class ZombieMode {
     );
   }
 
-  // Starts the game mode timers and enemy spawning.
   start() {
     this.warmupTimer = setTimeout(() => {
       this.spawnStartedAt = Date.now();
@@ -149,7 +161,6 @@ export class ZombieMode {
     }, ENEMY_SPAWN.warmupMs);
   }
 
-  // Stops all timers and clears active enemies.
   stop() {
     clearTimeout(this.warmupTimer);
     clearTimeout(this.spawnTimer);
@@ -160,10 +171,9 @@ export class ZombieMode {
     this.playerShots.clear();
   }
 
-  // Spawns an enemy at a clear map position: a random type, or a forced type when given.
+  // Spawns a random enemy, or a forced type; forced spawns (the scripted boss) ignore the wave cap.
   spawn(forcedType = null) {
-    // Forced spawns (the scripted boss) ignore the global wave cap; random waves respect it.
-    if (this.zones.length === 0) return null;
+    if (this.zones.length === 0 && this.bossZones.length === 0) return null;
     if (!forcedType && this.enemies.size >= this.currentCap()) return null;
 
     const occupied = Array.from(this.enemies.values());
@@ -177,17 +187,23 @@ export class ZombieMode {
 
     const pick = forcedType ? available[0] : available[Math.floor(Math.random() * available.length)];
     const stats = resolveStats(pick);
-    const point = findSpawnPoint(this.zones, occupied, {
+    // Boss types get the map's dedicated boss_spawn rectangle; everything else uses the enemy zones.
+    const isBoss = pick.bossOnly === true && this.bossZones.length > 0;
+    const zones = isBoss ? this.bossZones : this.zones;
+    if (zones.length === 0) return null;
+    const point = findSpawnPoint(zones, occupied, {
       edgePadding: SPAWN.edgePadding,
       minSpacing: SPAWN.minEnemySpacing,
       maxAttempts: SPAWN.maxAttempts * 4,
       targets: this.activePlayers.map((p) => ({ x: p.x, y: p.y })),
       distanceFalloff: SPAWN.enemyDistanceFalloff,
       isValidPoint: (candidate) => {
+        // The boss zone is placed deliberately and the dragon flies over terrain, so it is trusted as drawn.
+        if (isBoss) return true;
         if (!canStandAt(this.collision, candidate.x, candidate.y, enemyCollisionBodyFromStats(stats))) {
           return false;
         }
-        // Reject spawns in pockets no player could ever be chased from (sealed by walls/water).
+        // Reject pockets sealed off by walls/water, where no player could ever be chased from.
         if (this.activePlayers.length === 0) return true;
         return this.activePlayers.some((p) => this.pathfinder.reachable(candidate, p));
       },
@@ -221,6 +237,12 @@ export class ZombieMode {
     if (!this.bossSpawned) {
       const id = this.spawn('dragon');
       if (id) {
+        // Grow the boss per extra player so the fight length holds steady in co-op.
+        const boss = this.enemies.get(id);
+        const cfg = ZOMBIE_ENEMY_TYPES.find((t) => t.type === 'dragon');
+        const bonus = (cfg?.healthPerExtraPlayer || 0) * Math.max(0, this.activePlayers.length - 1);
+        boss.health += bonus;
+        boss.stats.health += bonus;
         this.bossId = id;
         this.bossSpawned = true;
       }
@@ -229,6 +251,30 @@ export class ZombieMode {
     const boss = this.enemies.get(this.bossId);
     if (!boss || boss.dying) return { reason: 'boss-defeated' };
     return null;
+  }
+
+  // Frost Nova: slows every enemy in radius, refreshing rather than stacking so repeat casts can't freeze.
+  applySlow(hitbox, radius, slow) {
+    if (!slow) return;
+    const until = Date.now() + slow.durationMs;
+    for (const enemy of this.enemies.values()) {
+      if (enemy.dying) continue;
+      if (!hitboxesWithinRange(hitbox, enemyHitbox(enemy), radius)) continue;
+      enemy.slowUntil = until;
+      enemy.slowMultiplier = slow.multiplier;
+    }
+  }
+
+  // Blessing: the debuff sits on the enemy, not the caster, so a weakened zombie hits every player for less.
+  applyWeaken(hitbox, radius, weaken) {
+    if (!weaken) return;
+    const until = Date.now() + weaken.durationMs;
+    for (const enemy of this.enemies.values()) {
+      if (enemy.dying) continue;
+      if (!hitboxesWithinRange(hitbox, enemyHitbox(enemy), radius)) continue;
+      enemy.weakenUntil = until;
+      enemy.weakenMultiplier = weaken.multiplier;
+    }
   }
 
   moveEnemy(enemy, deltaX, deltaY) {
@@ -279,13 +325,13 @@ export class ZombieMode {
     }
   }
 
-  // Advances the simulation by one tick, updating enemy AI, movements, and attacks.
+  // Advances enemy AI, movement and attacks by one tick.
   tick(players) {
     const now = Date.now();
     const playerDamage = [];
     this.activePlayers = players;
 
-    // Remove dead enemies after their death animation plays.
+    // Drop dead enemies once their death animation has played.
     for (const [id, enemy] of this.enemies) {
       if (enemy.dying && now - enemy.diedAt >= ENEMY_COMBAT.deathLingerMs) {
         this.enemies.delete(id);
@@ -299,7 +345,6 @@ export class ZombieMode {
       return { playerDamage };
     }
 
-    // Prepare pathfinding for targets.
     this.pathfinder.prepare(players);
 
     for (const enemy of this.enemies.values()) {
@@ -317,7 +362,7 @@ export class ZombieMode {
         enemy.action = null;
       }
 
-      // Mid wind-up: hold position, then resolve — a melee swing lands only if the target is still in reach; a throw releases the bomb.
+      // Mid wind-up: hold position, then resolve — a swing lands only if the target is still in reach, a throw releases the bomb.
       if (enemy.windupHitAt) {
         const isThrow = enemy.windupKind === 'throw';
         if (now < enemy.windupHitAt) {
@@ -326,13 +371,14 @@ export class ZombieMode {
         }
         enemy.windupHitAt = 0;
         const target = players.find((p) => p.id === enemy.targetId);
+        if (target) enemy.face = target.x >= enemy.x ? 1 : -1;
         if (isThrow) {
           // The projectile lands on the target's spot at this instant, regardless of where they move next.
           if (target) this.throwProjectile(enemy, target);
         } else if (target && hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.attackRange)) {
           playerDamage.push({
             playerId: target.id,
-            amount: enemy.stats.attackDamage,
+            amount: enemyDamage(enemy, enemy.stats.attackDamage, now),
             sourceX: enemy.x,
             sourceY: enemy.y,
             enemyId: enemy.id,
@@ -348,6 +394,9 @@ export class ZombieMode {
         enemy.targetId = null;
         continue;
       }
+
+      // Always square up to the target so attacks never play facing away from the player.
+      enemy.face = target.x >= enemy.x ? 1 : -1;
 
       // A cornered thrower melees; at distance it throws. Melee instances only ever have the short reach.
       const inMelee = hitboxesWithinRange(enemyHitbox(enemy), target.hitbox, enemy.stats.attackRange);
@@ -368,12 +417,14 @@ export class ZombieMode {
         const dx = target.x - enemy.x;
         const dy = target.y - enemy.y;
         const len = Math.hypot(dx, dy) || 1;
-        this.moveFlying(enemy, (dx / len) * enemy.stats.speed, (dy / len) * enemy.stats.speed);
+        const speed = enemySpeed(enemy, now);
+        this.moveFlying(enemy, (dx / len) * speed, (dy / len) * speed);
       } else {
         const dir = this.pathfinder.direction(enemy, target);
         const beforeX = enemy.x;
         const beforeY = enemy.y;
-        this.moveEnemy(enemy, dir.x * enemy.stats.speed, dir.y * enemy.stats.speed);
+        const speed = enemySpeed(enemy, now);
+        this.moveEnemy(enemy, dir.x * speed, dir.y * speed);
         this.unstick(enemy, dir, beforeX, beforeY);
       }
     }
@@ -392,7 +443,7 @@ export class ZombieMode {
     return { playerDamage };
   }
 
-  // Living enemies, as projectile targets. Used both to resolve flight and to assist aim.
+  // Living enemies as projectile targets; used to resolve flight and to assist aim.
   shotTargets() {
     const targets = [];
     for (const enemy of this.enemies.values()) {
@@ -413,7 +464,7 @@ export class ZombieMode {
     this.playerShots.tick(now, targets, (target, shot) => {
       const enemy = target.enemy;
       if (shot.dot) {
-        // Poison: fresh hits refresh the stack rather than stacking multiple timers.
+        // Fresh hits refresh the poison rather than stacking timers.
         enemy.dot = {
           ticksLeft: shot.dot.ticks,
           intervalMs: shot.dot.intervalMs,
@@ -426,7 +477,6 @@ export class ZombieMode {
     });
   }
 
-  // Ticks poison damage on afflicted enemies.
   updateDots(now) {
     for (const enemy of this.enemies.values()) {
       if (enemy.dying || !enemy.dot || now < enemy.dot.nextAt) continue;
@@ -445,12 +495,12 @@ export class ZombieMode {
     emitGameEvent('kill', { playerId: owner.playerId, name: owner.name, kills: owner.kills });
   }
 
-  // Launches a bomb toward the target's current position; the landing spot is fixed at release, so moving away dodges it.
+  // The landing spot is fixed at release, so moving away dodges it.
   throwProjectile(enemy, target) {
     const cfg = enemy.stats.projectile;
     const startX = enemy.x;
-    const startY = enemy.y - 20; // thrown from around hand height
-    // Aim from the actual release point so the trajectory passes exactly through the target.
+    const startY = enemy.y - 20; // hand height
+    // Aim from the release point so the trajectory passes exactly through the target.
     const dx = target.x - startX;
     const dy = target.y - startY;
     const len = Math.hypot(dx, dy) || 1;
@@ -465,8 +515,9 @@ export class ZombieMode {
       targetY: target.y,
       vx: (dx / len) * cfg.speed,
       vy: (dy / len) * cfg.speed,
-      angle: Math.atan2(dy, dx), // flight heading, so the client can point the sprite where it's going
-      damage: cfg.damage,
+      angle: Math.atan2(dy, dx), // flight heading, so the client can point the sprite
+      // Read at release, so a bomb thrown by a weakened enemy lands soft even if the debuff lapses mid-flight.
+      damage: enemyDamage(enemy, cfg.damage, Date.now()),
       splashRadius: cfg.splashRadius,
       explosionLingerMs: cfg.explosionLingerMs,
       exploded: false,
@@ -475,7 +526,7 @@ export class ZombieMode {
     });
   }
 
-  // Advances projectiles; on arrival they explode, splash-damage players in radius, then linger for the client's explosion anim.
+  // On arrival projectiles explode, splash players in radius, then linger for the client's explosion anim.
   updateProjectiles(players, playerDamage, now) {
     for (const [id, proj] of this.projectiles) {
       if (proj.exploded) {
@@ -519,7 +570,7 @@ export class ZombieMode {
     }
   }
 
-  // Processes damage dealt by a player's attack to nearby enemies. `attacker` is unused here but keeps a uniform signature across modes.
+  // Radial damage from a player's swing. `attacker` is unused, but keeps the signature uniform across modes.
   playerAttack(attacker, hitbox, range, damage) {
     const attackerHitbox = hitbox;
     let hits = 0;
@@ -535,7 +586,7 @@ export class ZombieMode {
       if (damageEnemy(enemy, damage)) {
         kills++;
       } else if (!enemy.stats.knockbackResist && now >= (enemy.knockbackImmuneUntil || 0)) {
-        // Knock the survivor away from the attacker, with brief immunity so rapid attacks can't stun-lock it.
+        // Brief immunity after the shove so rapid attacks can't stun-lock it.
         const cx = (attackerHitbox.left + attackerHitbox.right) / 2;
         const cy = (attackerHitbox.top + attackerHitbox.bottom) / 2;
         const dx = enemy.x - cx;
@@ -551,19 +602,18 @@ export class ZombieMode {
     return { hit: hits > 0, killed: kills > 0, hits, kills };
   }
 
-  // Applies damage to a specific enemy by id (used by the reflect shield to bounce an attack back at its source). Returns true if it killed the enemy.
+  // Used by reflect to bounce an attack back at its source; returns true if it killed the enemy.
   damageEnemyById(id, amount) {
     const enemy = this.enemies.get(id);
     if (!enemy || enemy.dying) return false;
     return damageEnemy(enemy, amount);
   }
 
-  // Updates the player target that the enemy is currently chasing.
   updateTarget(enemy, players) {
-    const { aggroRange, leashMultiplier, commitForLife } = enemy.stats;
+    const { aggroRange, leashMultiplier, commitForLife, retargetNearest } = enemy.stats;
 
-    // Keep the current target unless they escape or die.
-    if (enemy.targetId !== null) {
+    // Keep the current target unless they escape or die (retargeters always re-scan below).
+    if (!retargetNearest && enemy.targetId !== null) {
       const current = players.find((p) => p.id === enemy.targetId);
       if (!current) {
         enemy.targetId = null;
@@ -574,7 +624,7 @@ export class ZombieMode {
       }
     }
 
-    // Find and target the closest player within range.
+    // Target the closest player within range.
     let nearestId = null;
     let nearestSq = aggroRange * aggroRange;
     for (const p of players) {
@@ -587,7 +637,7 @@ export class ZombieMode {
     enemy.targetId = nearestId;
   }
 
-  // Pushes overlapping enemies apart so they do not stack.
+  // Pushes overlapping enemies apart so they don't stack.
   separate() {
     const list = Array.from(this.enemies.values()).filter((e) => !e.stats.flies);
     const radius = ENEMY_MOVEMENT.separationRadius;
@@ -613,7 +663,6 @@ export class ZombieMode {
     }
   }
 
-  // Returns the client-facing enemy state patch.
   getStatePatch() {
     return {
       enemies: Array.from(this.enemies.values()).map((e) => ({
@@ -622,10 +671,12 @@ export class ZombieMode {
         y: Math.round(e.y),
         type: e.type,
         action: e.action || null,
+        // Faces the current target; the client falls back to movement flip when null.
+        face: e.face || null,
         hp: e.health,
         maxHp: e.stats.health,
       })),
-      // Enemy bombs and player shots share the client's projectile pipeline (ids never collide: p* vs s*).
+      // Enemy bombs and player shots share the client's pipeline; ids never collide (p* vs s*).
       projectiles: [
         ...Array.from(this.projectiles.values()).map((p) => ({
           id: p.id,
