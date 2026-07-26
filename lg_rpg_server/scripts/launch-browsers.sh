@@ -21,7 +21,6 @@ echo "Launching browsers on LG displays | Screens: $TOTAL_SCREENS | IP: $SERVER_
 # Physical left-to-right layout (LG convention, matches the controller app):
 #   leftmost = floor(N/2)+2 ... N, then master 1 (centre), then 2 ... floor(N/2)+1 = rightmost.
 #   e.g. N=3 -> 3 1 2  (leftmost 3, rightmost 2); N=5 -> 4 5 1 2 3  (leftmost 4, rightmost 3).
-# The last element is always the rightmost screen, which gets the leaderboard below.
 HALF=$((TOTAL_SCREENS / 2))
 PHYSICAL_SCREENS=()
 for ((i=HALF+2; i<=TOTAL_SCREENS; i++)); do   # left block: leftmost -> centre
@@ -38,14 +37,9 @@ for idx in "${!PHYSICAL_SCREENS[@]}"; do
   host_id="${PHYSICAL_SCREENS[$idx]}"
   pos=$((idx + 1))
 
-  if [ "$pos" -eq "$TOTAL_SCREENS" ]; then
-    URL="http://${SERVER_IP}:${PORT}/right_screen.html"
-    LABEL="Leaderboard"
-  else
-    URL="http://${SERVER_IP}:${PORT}/?screen=${GAME_SCREEN}"
-    LABEL="Game Screen ${GAME_SCREEN}"
-    ((GAME_SCREEN++))
-  fi
+  URL="http://${SERVER_IP}:${PORT}/?screen=${GAME_SCREEN}"
+  LABEL="Game Screen ${GAME_SCREEN}"
+  ((GAME_SCREEN++))
 
   BROWSER_CMD="DISPLAY=:0 chromium-browser \
     --autoplay-policy=no-user-gesture-required \
