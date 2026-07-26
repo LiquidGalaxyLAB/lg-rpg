@@ -1,14 +1,13 @@
-// Particle/burst effects for the game scene: death bursts, shard sprays, and the heart heal popup. Each helper takes the Phaser scene as its first argument so this logic can live outside the scene class.
+// Particle/burst effects for the game scene. Each helper takes the Phaser scene as its first argument, so this can live outside the scene class.
 
 // Big shard burst + camera shake for a player death on this screen.
 export function deathBurst(scene, x, y, color) {
   if (!scene.onScreen(x)) return;
   scene.cameras.main.shake(250, 0.008);
-  // Spill the shards once the shake settles.
   scene.time.delayedCall(250, () => spillShards(scene, x, y, color));
 }
 
-// Sprays colored shards with gravity; count/speed/life scale it from hit spark to death burst; `follow` anchors the spray to a moving sprite.
+// Colored shards under gravity; count/speed/life scale it from hit spark to death burst, and `follow` anchors the spray to a moving sprite.
 export function spillShards(scene, x, y, color, { count = 24, minSpeed = 60, maxSpeed = 170, minLife = 400, maxLife = 800, follow = null } = {}) {
   if (!scene.onScreen(x)) return;
   const gravity = 400;
@@ -35,7 +34,7 @@ export function spillShards(scene, x, y, color, { count = 24, minSpeed = 60, max
   }
 }
 
-// Pops a little cluster of green "+" icons that fan up and fade when the player picks up a heart, so the heal reads as a clear burst.
+// A cluster of green "+" icons that fan up and fade, so a heal reads as a clear burst.
 export function healPopup(scene, x, y) {
   if (!scene.onScreen(x)) return;
   const count = 6;
@@ -84,6 +83,56 @@ export function sparkleBurst(scene, x, y, follow = null, count = 10, yOffset = 0
   }
 }
 
+// Attack FX keyed by `actionKind`. `tint` recolours the white sheets only (Phaser tint multiplies, so cyan can't go violet); `ring` uses fixed angles so every screen matches; `ringRadius` stays inside the real damage radius.
+const ATTACK_FX = {
+  // The 500ms swing anim outlasts its own 350ms cooldown, so `replace` retires the previous sprite instead of piling them up.
+  melee: { key: 'fx:swing', scale: 1.0, replace: true },
+  // Staggered to the server's pulse intervals so each spawn lands with a damage tick.
+  tide: { key: 'fx:tide', scale: 1.3, ring: 3, ringRadius: 30, repeatMs: 180 },
+  riptide: { key: 'fx:riptide', scale: 1.2 },
+  frost: { key: 'fx:frost', scale: 1.6, ring: 3, ringRadius: 66, repeatMs: 120 },
+  blessing: { key: 'fx:blessing', scale: 1.4, tint: 0xffc53d },
+};
+
+// One-shot FX above the caster; a no-op for kinds without art (the huntress's projectiles carry their own). `owner` is the caster's sprite, used to retire a `replace` FX.
+export function playAttackFx(scene, kind, x, y, owner = null) {
+  const fx = ATTACK_FX[kind];
+  if (!fx || !scene.onScreen(x)) return;
+
+  if (fx.replace && owner?.attackFx) {
+    owner.attackFx.destroy();
+    owner.attackFx = null;
+  }
+
+  const spawn = (ox, oy) => {
+    const s = scene.add.sprite(x + ox, y + oy, fx.key, 0)
+      .setOrigin(0.5, 0.6)
+      .setScale(fx.scale)
+      // Above the sprites (which use depth = world y) but below the projectile blasts at 100000.
+      .setDepth(y + 5);
+    if (fx.tint) s.setTint(fx.tint);
+    s.play(`${fx.key}:play`);
+    s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      if (owner?.attackFx === s) owner.attackFx = null;
+      s.destroy();
+    });
+    if (fx.replace && owner) owner.attackFx = s;
+  };
+
+  if (fx.ring) {
+    for (let i = 0; i < fx.ring; i++) {
+      const angle = (Math.PI * 2 * i) / fx.ring;
+      // Squashed on y so the ring reads as lying on the ground rather than facing the camera.
+      const ox = Math.cos(angle) * fx.ringRadius;
+      const oy = Math.sin(angle) * fx.ringRadius * 0.6;
+      if (i === 0 || !fx.repeatMs) spawn(ox, oy);
+      else scene.time.delayedCall(i * fx.repeatMs, () => spawn(ox, oy));
+    }
+    return;
+  }
+  spawn(0, 0);
+}
+
 // Shield bubble on sprite.shieldFx; blinks as it expires, reflect (yellow) outranks shield (blue).
 export function updateShieldFx(scene, sprite, entity, localX, visible) {
   const kind = entity.reflect ? 'reflect' : entity.shield ? 'shield' : null;
@@ -92,12 +141,12 @@ export function updateShieldFx(scene, sprite, entity, localX, visible) {
     if (sprite.shieldFx) { sprite.shieldFx.destroy(); sprite.shieldFx = null; sprite.shieldFxKind = null; }
     return;
   }
-  // Body span from feet (entity.y) up to the sprite's top, so the bubble wraps the whole body.
+  // Feet (entity.y) to the sprite's top, so the bubble wraps the whole body.
   const bodyTop = sprite.cfg.bodyHeight != null
     ? sprite.cfg.bodyHeight * sprite.scaleY
     : sprite.displayHeight * sprite.originY;
   const centerY = entity.y - bodyTop / 2;
-  // Rebuild the bubble when switching between reflect and plain shield.
+  // Rebuilt when switching between reflect and plain shield.
   if (sprite.shieldFx && sprite.shieldFxKind !== kind) {
     sprite.shieldFx.destroy();
     sprite.shieldFx = null;
