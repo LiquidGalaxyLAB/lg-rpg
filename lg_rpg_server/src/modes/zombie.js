@@ -15,10 +15,11 @@ import { state } from '../state.js';
 import { emitGameEvent } from '../cheerleader-bridge.js';
 
 // Default enemy stats merged with any type-specific overrides.
-function resolveStats(pick) {
+// Types that declare their own aggroRange keep it; the rest use the map-sized default.
+function resolveStats(pick, defaultAggroRange) {
   return {
     speed: pick.speed ?? ENEMY_MOVEMENT.speed,
-    aggroRange: pick.aggroRange ?? ENEMY_MOVEMENT.aggroRange,
+    aggroRange: pick.aggroRange ?? defaultAggroRange,
     leashMultiplier: pick.leashMultiplier ?? ENEMY_MOVEMENT.leashMultiplier,
     commitForLife: pick.commitForLife ?? ENEMY_MOVEMENT.commitForLife,
     // Re-picks the closest player every tick (boss behavior) instead of locking one target.
@@ -124,6 +125,9 @@ export class ZombieMode {
     this.spawnStartedAt = 0;
     // Latest player snapshot, refreshed each tick, so spawning can bias toward nearby players.
     this.activePlayers = [];
+    // Corner-to-corner reach, so the widest map still leaves no spot where an enemy ignores a player.
+    this.defaultAggroRange =
+      Math.hypot(this.bounds.width, this.bounds.height) * ENEMY_MOVEMENT.aggroRangeFactor;
     this.pathfinder = createPathfinder({
       bounds: this.bounds,
       collision: this.collision,
@@ -186,7 +190,7 @@ export class ZombieMode {
     if (available.length === 0) return;
 
     const pick = forcedType ? available[0] : available[Math.floor(Math.random() * available.length)];
-    const stats = resolveStats(pick);
+    const stats = resolveStats(pick, this.defaultAggroRange);
     // Boss types get the map's dedicated boss_spawn rectangle; everything else uses the enemy zones.
     const isBoss = pick.bossOnly === true && this.bossZones.length > 0;
     const zones = isBoss ? this.bossZones : this.zones;

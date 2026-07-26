@@ -214,7 +214,8 @@ export const CHEERLEADER = Object.freeze({
 
 export const ENEMY_MOVEMENT = Object.freeze({
   speed: 1,
-  aggroRange: 350,
+  // Fraction of the loaded map's diagonal; lower it to leave far corners safe.
+  aggroRangeFactor: 1,
   leashMultiplier: 1.5,
   commitForLife: false,
   separationRadius: 28,
