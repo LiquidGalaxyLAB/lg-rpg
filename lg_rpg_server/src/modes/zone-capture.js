@@ -9,15 +9,13 @@ import { PlayerProjectiles } from '../lib/player-projectiles.js';
 // Match phases: live -> finished. Teams spawn on opposite sides, so no lock/grace is needed.
 const PHASE = Object.freeze({ ACTIVE: 'active', ENDED: 'ended' });
 
-const TICKS_PER_POINT = Math.round((1000 * PVP.secondsPerPoint) / GAME_LOOP.tickRateMs);
+const MS_PER_POINT = 1000 * PVP.secondsPerPoint;
 
-// Picks a random rectangle from a list of map zones.
 function pickRect(rects) {
   if (!rects || rects.length === 0) return null;
   return rects[Math.floor(Math.random() * rects.length)];
 }
 
-// Returns the center of a rectangle, used as a placement fallback.
 function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
 }
@@ -44,7 +42,9 @@ export class ZoneCaptureMode {
       : [];
 
     this.phase = PHASE.ACTIVE;
-    this.zoneTicks = { teamA: 0, teamB: 0 };
+    // Real milliseconds, not loop ticks: the loop drifts under load and would stretch PVP.secondsPerPoint on a busy rig.
+    this.zoneHeldMs = { teamA: 0, teamB: 0 };
+    this.lastZoneUpdateAt = 0;
     this.pendingDamage = [];
     this.respawnAt = new Map(); // playerId -> timestamp the player returns
     this.invulnUntil = new Map(); // playerId -> timestamp protection expires
@@ -53,11 +53,11 @@ export class ZoneCaptureMode {
 
     this.startedAt = 0;
     this.roundEndsAt = 0;
+    this.forfeitSince = 0; // when a team first emptied, so forfeits need sustained absence
   }
 
-  // Balances teams and places each player inside their own team's spawn box.
+  // Fills unassigned players into the smaller team, then places everyone in their team's spawn box.
   placePlayers(players) {
-    // Fill unassigned players into the smaller team for balance.
     const count = { teamA: 0, teamB: 0 };
     for (const p of players) {
       if (PVP_TEAMS.includes(p.team)) count[p.team] += 1;
@@ -81,7 +81,7 @@ export class ZoneCaptureMode {
     }
   }
 
-  // Finds a clear point inside a spawn box, falling back to its center.
+  // A clear point inside a spawn box, falling back to its center.
   spawnPoint(box, occupied) {
     return (
       findSpawnPoint([box], occupied, {
@@ -97,12 +97,13 @@ export class ZoneCaptureMode {
     const now = Date.now();
     this.startedAt = now;
     this.roundEndsAt = now + PVP.roundDurationMs;
+    this.lastZoneUpdateAt = now;
     this.phase = PHASE.ACTIVE;
   }
 
-  // Clears mode state.
   stop() {
     this.phase = PHASE.ENDED;
+    this.forfeitSince = 0;
     this.respawnAt.clear();
     this.invulnUntil.clear();
     this.pendingDamage = [];
@@ -114,7 +115,7 @@ export class ZoneCaptureMode {
   tick() {
     const now = Date.now();
     this.processRespawns(now);
-    this.updateZoneControl();
+    this.updateZoneControl(now);
     this.updatePlayerShots(now);
     this.updateDots(now);
 
@@ -123,8 +124,7 @@ export class ZoneCaptureMode {
     return { playerDamage };
   }
 
-  // Hittable players, as projectile targets. Used both to resolve flight and to assist aim.
-  // Just-respawned (invulnerable) players are omitted, so assist won't lock onto them either.
+  // Hittable players as projectile targets; just-respawned (invulnerable) ones are omitted so aim assist skips them too.
   shotTargets(now) {
     const targets = [];
     for (const p of state.players.values()) {
@@ -148,7 +148,7 @@ export class ZoneCaptureMode {
       if (this.phase !== PHASE.ACTIVE) return;
       this.queueShotDamage(target.player, shot.damage, shot);
       if (shot.dot) {
-        // Poison: fresh hits refresh the stack rather than stacking multiple timers.
+        // Fresh hits refresh the poison rather than stacking timers.
         this.dots.set(target.id, {
           ticksLeft: shot.dot.ticks,
           intervalMs: shot.dot.intervalMs,
@@ -160,7 +160,7 @@ export class ZoneCaptureMode {
     });
   }
 
-  // Ticks poison damage on afflicted players; death or respawn clears the stack.
+  // Death or respawn clears the poison stack.
   updateDots(now) {
     for (const [playerId, dot] of this.dots) {
       const target = state.players.get(playerId);
@@ -202,7 +202,6 @@ export class ZoneCaptureMode {
     return true;
   }
 
-  // Schedules respawns for downed players and revives them when due.
   processRespawns(now) {
     for (const p of state.players.values()) {
       if (!p.dead) {
@@ -238,7 +237,6 @@ export class ZoneCaptureMode {
     this.invulnUntil.set(player.playerId, now + PVP.invulnMs);
     this.dots.delete(player.playerId); // a fresh life starts clean of poison
 
-    // Tell the respawned player's controller to return to the game controls.
     if (player.socketId) {
       io.to(player.socketId).emit(SOCKET_EVENTS.YOU_RESPAWNED, {
         playerId: player.playerId,
@@ -247,9 +245,12 @@ export class ZoneCaptureMode {
     }
   }
 
-  // The zone held by a single team earns that team one tick.
-  updateZoneControl() {
+  // The zone held by a single team earns that team the elapsed real time since the last update.
+  updateZoneControl(now = Date.now()) {
     if (this.phase !== PHASE.ACTIVE) return;
+    // A long stall (GC, a blocked loop) must not hand over a huge lump of held time at once.
+    const deltaMs = Math.min(Math.max(0, now - this.lastZoneUpdateAt), GAME_LOOP.tickRateMs * 5);
+    this.lastZoneUpdateAt = now;
     for (const zone of this.zones) {
       let teamAInside = false;
       let teamBInside = false;
@@ -260,10 +261,10 @@ export class ZoneCaptureMode {
       }
 
       if (teamAInside && !teamBInside) {
-        this.zoneTicks.teamA += 1;
+        this.zoneHeldMs.teamA += deltaMs;
         zone.currentTeam = 'teamA';
       } else if (teamBInside && !teamAInside) {
-        this.zoneTicks.teamB += 1;
+        this.zoneHeldMs.teamB += deltaMs;
         zone.currentTeam = 'teamB';
       } else {
         zone.currentTeam = 'neutral';
@@ -271,7 +272,7 @@ export class ZoneCaptureMode {
     }
   }
 
-  // Tests whether a player's feet are within a zone (circle or rectangle).
+  // Whether a player's feet are inside a zone (circle or rectangle).
   insideZone(p, z) {
     if (z.ellipse) {
       const rx = z.width / 2;
@@ -286,8 +287,8 @@ export class ZoneCaptureMode {
   // Capture points: one point per PVP.secondsPerPoint a team alone holds the circle.
   getScores() {
     return {
-      teamA: Math.floor(this.zoneTicks.teamA / TICKS_PER_POINT),
-      teamB: Math.floor(this.zoneTicks.teamB / TICKS_PER_POINT),
+      teamA: Math.floor(this.zoneHeldMs.teamA / MS_PER_POINT),
+      teamB: Math.floor(this.zoneHeldMs.teamB / MS_PER_POINT),
     };
   }
 
@@ -323,8 +324,12 @@ export class ZoneCaptureMode {
   // Returns the round result when the timer expires or a whole team has left.
   checkMatchEnd() {
     if (this.phase === PHASE.ENDED) return null;
+    // start() has not run yet, so there is no round to end — never read the unset 0 as "expired".
+    if (!this.roundEndsAt) return null;
 
-    // Forfeit: if every player on one team disconnected, the other team wins.
+    const now = Date.now();
+
+    // An empty team forfeits, but only after the grace window, so a brief drop-and-rejoin doesn't hand over the round.
     const counts = { teamA: 0, teamB: 0 };
     for (const p of state.players.values()) {
       if (PVP_TEAMS.includes(p.team)) counts[p.team] += 1;
@@ -333,13 +338,18 @@ export class ZoneCaptureMode {
       counts.teamA === 0 && counts.teamB > 0 ? 'teamB'
         : counts.teamB === 0 && counts.teamA > 0 ? 'teamA'
           : null;
-    if (forfeitWinner) {
-      this.phase = PHASE.ENDED;
-      for (const zone of this.zones) zone.currentTeam = 'neutral';
-      return { reason: 'pvp-forfeit', winner: forfeitWinner, scores: this.getScores() };
+    if (!forfeitWinner) {
+      this.forfeitSince = 0;
+    } else {
+      if (!this.forfeitSince) this.forfeitSince = now;
+      if (now - this.forfeitSince >= PVP.forfeitGraceMs) {
+        this.phase = PHASE.ENDED;
+        for (const zone of this.zones) zone.currentTeam = 'neutral';
+        return { reason: 'pvp-forfeit', winner: forfeitWinner, scores: this.getScores() };
+      }
     }
 
-    if (Date.now() < this.roundEndsAt) return null;
+    if (now < this.roundEndsAt) return null;
     this.phase = PHASE.ENDED;
     for (const zone of this.zones) zone.currentTeam = 'neutral';
 
@@ -349,7 +359,6 @@ export class ZoneCaptureMode {
     return { reason: 'pvp-round-end', winner, scores };
   }
 
-  // Returns the client-facing PvP state patch.
   getStatePatch() {
     return {
       projectiles: this.playerShots.list(),
