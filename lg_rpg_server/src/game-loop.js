@@ -15,10 +15,10 @@ import { emitGameEvent } from './cheerleader-bridge.js';
 import { endMatch } from './match.js';
 import { everyPlayerDead, playerHitbox } from './players.js';
 
-// Starts the core game loop to update positions and broadcast state.
+// Core loop: moves players, ticks the mode, broadcasts state.
 export function startGameLoop() {
   setInterval(() => {
-    // Move players within map bounds, confined to the spawn box during PvP lock phase.
+    // Confined to the spawn box during the PvP lock phase, map bounds otherwise.
     if (state.worldBounds) {
       const confine = state.activeMode?.getConfinement?.() || null;
       const bounds = confine
@@ -52,7 +52,6 @@ export function startGameLoop() {
       }
     }
 
-    // Update active game mode simulation and apply damage to players.
     if (state.activeMode) {
       const alive = Array.from(state.players.values())
         .filter((p) => !p.dead)
@@ -63,7 +62,8 @@ export function startGameLoop() {
       for (const hit of playerDamage || []) {
         const player = state.players.get(hit.playerId);
         if (!player || player.dead) continue;
-        // Reflect bounces damage back, amplified; bounced hits don't re-reflect.
+        // Bounces damage back amplified (bounced hits don't re-reflect), but the wearer still takes a reduced share — it is not a second shield.
+        let amount = hit.amount;
         if ((player.reflectUntil || 0) > now) {
           if (!hit.bounced) {
             const bounced = hit.amount * POWERUP_BY_ID.reflect.multiplier;
@@ -79,11 +79,11 @@ export function startGameLoop() {
               state.activeMode.damagePlayerById(hit.attackerId, bounced, player.playerId);
             }
           }
-          continue;
+          amount = Math.round(hit.amount * (1 - (POWERUP_BY_ID.reflect.reduction ?? 1)));
+          if (amount <= 0) continue;
         }
-        // Shield: absorbs all enemy damage while active.
         if ((player.shieldUntil || 0) > now) continue;
-        player.health = Math.max(0, player.health - hit.amount);
+        player.health = Math.max(0, player.health - amount);
         if (player.health === 0) {
           player.dead = true;
           player.action = 'death';
@@ -99,17 +99,14 @@ export function startGameLoop() {
             emitGameEvent('kill', { playerId: killer.playerId, name: killer.name, kills: killer.kills });
           }
 
-          // Notify the dead player's controller.
           if (player.socketId) {
             io.to(player.socketId).emit(SOCKET_EVENTS.YOU_DIED, { playerId: player.playerId });
           }
         } else {
-          // Signal low-health warning when falling below 30% HP.
           if (!player.lowHealthSignaled && player.health <= player.maxHealth * 0.3) {
             player.lowHealthSignaled = true;
             emitGameEvent('player_low_health', { playerId: player.playerId, name: player.name, hp: player.health });
           }
-          // Trigger a hit animation for the player.
           if (player.action !== 'attack' || now >= player.actionExpiresAt) {
             player.action = 'take_hit';
             player.actionExpiresAt = now + PLAYER_DEFAULTS.actionSignalMs;
@@ -127,7 +124,6 @@ export function startGameLoop() {
         }
       }
 
-      // Handle healing item pickups.
       if (state.heartField) {
         for (const player of state.players.values()) {
           if (player.dead) continue;
@@ -152,7 +148,6 @@ export function startGameLoop() {
           if (result) {
             endMatch(result.reason);
           } else if (state.activeMode.bossSpawned && !state.activeMode.bossAnnounced) {
-            // One-time entrance: banner on the screens plus a cheerleader call-out.
             state.activeMode.bossAnnounced = true;
             io.emit(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, {
               message: 'The dragon has awoken — slay it to win!',
@@ -164,16 +159,16 @@ export function startGameLoop() {
       }
     }
 
-    // Clear temporary actions (like attacking or taking damage) after they finish.
+    // Clear temporary actions (attack, take_hit) once they finish.
     const nowMs = Date.now();
     for (const player of state.players.values()) {
       if (!player.dead && player.actionExpiresAt && nowMs >= player.actionExpiresAt) {
         player.action = null;
+        player.actionKind = null;
         player.actionExpiresAt = 0;
       }
     }
 
-    // Broadcast the updated game state to all clients.
     const modePatch = state.activeMode ? state.activeMode.getStatePatch() : {};
     io.emit(SOCKET_EVENTS.GAME_STATE, {
       players: Array.from(state.players.values()).map((p) => {
@@ -192,12 +187,13 @@ export function startGameLoop() {
           kills: p.kills || 0,
           dead: p.dead,
           action: p.action || null,
+          // Which attack the action was, so the screens can pick the matching FX without their own event.
+          actionKind: p.actionKind || null,
           team: p.team || null,
           character: p.character || null,
           // Aim pointer: rounded to keep the payload small.
           facingX: Math.round((p.facingX ?? 1) * 100) / 100,
           facingY: Math.round((p.facingY ?? 0) * 100) / 100,
-          // Power-up states for the screen FX (sparkles, bubbles, aura).
           boost: boostMsLeft > 0,
           boostEnding: boostMsLeft > 0 && boostMsLeft <= POWERUP_BLINK_MS,
           shield: shieldMsLeft > 0,

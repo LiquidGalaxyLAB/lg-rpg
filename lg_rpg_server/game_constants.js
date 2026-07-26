@@ -1,7 +1,7 @@
 // Game-wide constants, configuration settings, and environment variables.
 import 'dotenv/config';
 
-export { SOCKET_EVENTS, GAME_VIEW, GAME_PHASES } from './public/shared_constants.js';
+export { SOCKET_EVENTS, GAME_VIEW, GAME_PHASES, MAP_TILE_SIZE, mapTilesForScreens } from './public/shared_constants.js';
 export {
   LOADOUT_SLOTS,
   POWERUP_BLINK_MS,
@@ -16,7 +16,6 @@ import {
   CHARACTER_CATALOG,
 } from './public/shared_constants.js';
 
-// Parses the environment variable whether it's a finite number or returns the fallback value.
 function readNumberEnv(name, fallback) {
   const rawValue = process.env[name];
   if (rawValue === undefined || rawValue === '') {
@@ -31,7 +30,6 @@ function readNumberEnv(name, fallback) {
   return value;
 }
 
-// Reads an environment variable and ensures the resulting value is a positive integer.
 function readPositiveIntegerEnv(name, fallback) {
   const value = readNumberEnv(name, fallback);
   if (!Number.isInteger(value) || value <= 0) {
@@ -55,7 +53,6 @@ export const DEFAULT_GAME_MODE = GAME_MODES.ZOMBIE;
 
 export const VALID_GAME_MODES = Object.freeze(new Set(Object.values(GAME_MODES)));
 
-// Server and network settings.
 export const SERVER_CONFIG = Object.freeze({
   port: readPositiveIntegerEnv('PORT', 8111),
   totalScreens: readPositiveIntegerEnv('TOTAL_SCREENS', 3),
@@ -68,14 +65,16 @@ export const PLAYER_SIZE = Object.freeze({
   height: readPositiveIntegerEnv('PLAYER_HEIGHT', 48),
 });
 
+// Speeds/ranges are world px already retuned ÷3 for the 360px-per-screen world — do not divide again. Hitboxes and splash stay sprite-anchored and were never scaled.
 export const PLAYER_DEFAULTS = Object.freeze({
   speed: 1.3,
   maxHealth: 100,
-  attackRange: 80, attackDamage: 15,
+  attackRange: 45, attackDamage: 15,
   attackCooldownMs: 350,
   actionSignalMs: 150,
 
-  knockbackSpeed: 2.0, knockbackMs: 100, knockbackCooldownMs: 400,
+  // A velocity like `speed`; game-loop's fade halves the travel, so 3.0 over 150ms reads as a ~13px shove.
+  knockbackSpeed: 3.0, knockbackMs: 150, knockbackCooldownMs: 400,
 });
 
 // Ranged attacks keyed by the `kind` sent with PLAYER_ATTACK; sprites live under huntress.
@@ -83,39 +82,69 @@ export const PLAYER_RANGED = Object.freeze({
   // Input-to-release delay, timed to the huntress attack_1 draw frames (6 frames @ 12fps).
   windupMs: 330,
 
-  aimAssist: Object.freeze({ maxAngleDeg: 12 }),
+  // Wide enough that pointing roughly at a target connects; the shot still goes where you aim.
+  aimAssist: Object.freeze({ maxAngleDeg: 50 }),
   attacks: Object.freeze({
-    // Tuned against the melee swing (15 dmg, 80px radius, 350ms); specials sit above it.
+    // Tuned against the melee swing (15 dmg, 45px, 350ms); scales are sized against the ~27px huntress body — basics smaller, specials up to ~2x, all below the boss.
     arrow: {
-      // Two-shots a basic 30hp zombie, same per-hit damage as the sword.
+      // Two-shots a basic 30hp zombie; scale 1.1 reads as an arrow, not a spear.
       sprite: 'player:huntress:proj:arrow',
-      // scale sized against the huntress body (~27px): 24px sheet × 1.1 reads as an arrow, not a spear.
-      speed: 9, damage: 35, maxRange: 380, scale: 1.1, cooldownMs: 500, explosionLingerMs: 220,
+      speed: 3, damage: 18, maxRange: 130, scale: 1.1, cooldownMs: 500, explosionLingerMs: 220,
     },
     fire: {
-      // Fire charge: detonates on the first enemy hit with splash damage — one-shots basic zombies.
+      // Detonates on the first enemy hit with splash — one-shots basic zombies.
       sprite: 'player:huntress:proj:fire',
-      speed: 7, damage: 70, maxRange: 460, scale: 2, cooldownMs: 4000,
-      splashRadius: 60, explosionLingerMs: 500,
+      speed: 2.4, damage: 60, maxRange: 155, scale: 1.4, cooldownMs: 4000,
+      splashRadius: 55, explosionLingerMs: 500,
     },
     poison: {
-      // Acid shot: modest on impact but burns the target down over time (28 total).
+      // Modest on impact, burns the target down over time (44 total).
       sprite: 'player:huntress:proj:poison',
-      speed: 7, damage: 8, maxRange: 460, scale: 1.6, cooldownMs: 4000, explosionLingerMs: 420,
-      dot: { ticks: 5, intervalMs: 800, damage: 4 },
+      speed: 2.4, damage: 8, maxRange: 155, scale: 1.0, cooldownMs: 4000, explosionLingerMs: 420,
+      dot: { ticks: 6, intervalMs: 800, damage: 6 },
     },
     magic: {
-      // Magic bolt: pierces, damaging everything along its line once.
+      // Pierces, damaging everything along its line once.
       sprite: 'player:huntress:proj:magic',
-      speed: 10, damage: 50, maxRange: 460, scale: 1.8, cooldownMs: 3500,
+      speed: 3.4, damage: 40, maxRange: 155, scale: 1.2, cooldownMs: 3500,
       pierce: true, explosionLingerMs: 320,
     },
     ghost: {
-      // Ghost orb: slow, curves toward the nearest target, small splash on impact.
+      // Slow, curves toward the nearest target, small splash on impact.
       sprite: 'player:huntress:proj:ghost',
-      speed: 4, damage: 50, maxRange: 600, scale: 1.6, cooldownMs: 5000,
+      speed: 1.4, damage: 45, maxRange: 200, scale: 1.1, cooldownMs: 5000,
       splashRadius: 40, explosionLingerMs: 380,
-      homing: { turnRate: 0.09, acquireRange: 260 },
+      homing: { turnRate: 0.09, acquireRange: 90 },
+    },
+  }),
+});
+
+// Melee specials keyed by `kind` in PLAYER_ATTACK, run through the mode's playerAttack radial; slow/weaken need a mode hook. They add burst, reach, crowd control and sustain, not raw damage.
+export const PLAYER_SPECIALS = Object.freeze({
+  // Reach for specials that leave the swing radius: 2x the 55px swing, under the huntress's 130px arrow.
+  range: 110,
+  attacks: Object.freeze({
+    tide: {
+      // Burst inside the normal swing radius: 90 over 540ms, where three swings would need 1050ms for 60.
+      mode: 'pulse', pulses: 3, pulseIntervalMs: 180, damage: 30, radius: 55,
+      cooldownMs: 4000,
+    },
+    riptide: {
+      // Gap-closer against throwers that outrange her. The dash rides the knockback channel, whose fade divides by knockbackMs (150) not dashMs, so 5.5 over 220ms travels ~53px — retune against that measured distance.
+      mode: 'dash', damage: 25, radius: 45, dashSpeed: 5.5, dashMs: 220, hits: 2,
+      cooldownMs: 4000,
+    },
+    frost: {
+      // Less total damage than Tide Slam for nearly double the reach; the slow, not the damage, is the point.
+      mode: 'pulse', pulses: 3, pulseIntervalMs: 120, damage: 15, radius: 110,
+      slow: Object.freeze({ multiplier: 0.5, durationMs: 3000 }),
+      cooldownMs: 5000,
+    },
+    blessing: {
+      // Heals only the caster (5hp/s, above the Greater Potion's 3.3); the weaken rides on the *enemy*, so it hits every player for less.
+      mode: 'blessing', heal: 30, radius: 110,
+      weaken: Object.freeze({ multiplier: 0.5, durationMs: 6000 }),
+      cooldownMs: 6000,
     },
   }),
 });
@@ -128,13 +157,16 @@ export const CHARACTER_KITS = Object.freeze(Object.fromEntries(
   })]),
 ));
 
-// Set of valid character ids a player may pick from the controller.
+// Characters without an override use PLAYER_DEFAULTS.
+export const CHARACTER_MELEE = Object.freeze(Object.fromEntries(
+  CHARACTER_CATALOG.filter((c) => c.melee).map((c) => [c.id, c.melee]),
+));
+
 export const VALID_CHARACTERS = Object.freeze(new Set(CHARACTER_CATALOG.map((c) => c.id)));
 
-// The character everyone starts on until they pick one in the lobby.
+// What everyone starts on until they pick in the lobby.
 export const DEFAULT_CHARACTER = 'huntress';
 
-// Fast lookups for applying a loadout item's effect by id.
 export const POWERUP_BY_ID = Object.freeze(Object.fromEntries(POWERUP_CATALOG.map((p) => [p.id, p])));
 export const HEALTH_BY_ID = Object.freeze(Object.fromEntries(HEALTH_CATALOG.map((h) => [h.id, h])));
 
@@ -149,24 +181,27 @@ export const MATCH = Object.freeze({
 
 // Zone Capture (PvP) timings. Teams spawn apart, so the round starts live immediately.
 export const PVP = Object.freeze({
-  // Two teams need at least one player each, so a PvP match can't start solo.
   minPlayers: 2,
   roundDurationMs: 120000,
   respawnDelayMs: 4000,
   invulnMs: 2000,
-  // Holding the circle alone for this many seconds earns one point.
+  // Seconds of holding the circle alone that earn one point.
   secondsPerPoint: 6,
+  // How long a team stays empty before the other side wins by forfeit; covers a brief drop.
+  forfeitGraceMs: 8000,
 });
 
 export const PVP_TEAMS = Object.freeze(['teamA', 'teamB']);
 
+// edgePadding must stay under half the smallest spawn box or randomPointInRect collapses to the box centre and spacing can never be met.
 export const SPAWN = Object.freeze({
-  edgePadding: 28, minPlayerSpacing: 35, minEnemySpacing: 35, maxAttempts: 16,
-  enemyDistanceFalloff: 300,
+  edgePadding: 10, minPlayerSpacing: 35, minEnemySpacing: 35, maxAttempts: 16,
+  enemyDistanceFalloff: 100,
 });
 
+// Caps are per unit of walkable area, which shrank ~9x with the world while hitboxes stayed sprite-sized; the old 25/70 would pack enemies shoulder to shoulder.
 export const ENEMY_SPAWN = Object.freeze({
-  maxOnMap: 25, capRampStep: 11, capCeiling: 70, intervalMs: 700, minIntervalMs: 400, rampStepMs: 150, warmupMs: 30000,
+  maxOnMap: 9, capRampStep: 4, capCeiling: 24, intervalMs: 700, minIntervalMs: 400, rampStepMs: 150, warmupMs: 30000,
 });
 
 export const HEART = Object.freeze({
@@ -179,47 +214,50 @@ export const CHEERLEADER = Object.freeze({
 
 export const ENEMY_MOVEMENT = Object.freeze({
   speed: 1,
-  aggroRange: 1050,
+  aggroRange: 350,
   leashMultiplier: 1.5,
   commitForLife: false,
   separationRadius: 28,
   separationStrength: 0.5,
   pathCellSize: 16,
   agentRadius: 14,
-  stuckEpsilon: 0.4,
+  stuckEpsilon: 0.15,
   stuckTicks: 8,
 });
 
 export const ENEMY_COMBAT = Object.freeze({
-  health: 30, hitboxHalfWidth: 16, hitboxHeight: 32, hitboxOriginY: 1, attackRange: 38, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700, actionSignalMs: 150,
+  // attackRange is the GAP between hitboxes, not center distance — 26 keeps swings looking like contact.
+  health: 30, hitboxHalfWidth: 16, hitboxHeight: 32, hitboxOriginY: 1, attackRange: 26, attackDamage: 8, attackCooldownMs: 1000, deathLingerMs: 700, actionSignalMs: 150,
   knockbackSpeed: 2.1, knockbackMs: 150, knockbackImmunityMs: 500,
-  attackWindupMs: 350,
+  // Short enough that a swing started in range still connects on a walking player.
+  attackWindupMs: 250,
 });
 
-// Stats for different zombie enemy types.
 export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   { type: 'skeleton' },
   {
     type: 'goblin',
     // Projectile-capable: ~rangedRatio of spawns become bomb throwers that keep distance; the rest melee.
-    throwRange: 260,
+    throwRange: 90,
     rangedRatio: 0.4,
     projectile: {
       sprite: 'enemy:goblin:proj:bomb',
-      speed: 5,
-      damage: 14,
-      splashRadius: 64,
+      speed: 1.8,
+      damage: 12,
+      // 48 keeps the blast escapable at walk speed during the bomb's flight; 64 was a near-guaranteed hit.
+      splashRadius: 48,
+      scale: 0.55,
       explosionLingerMs: 450,
       cooldownMs: 5000,
     },
   },
   {
     type: 'mushroom',
-    throwRange: 230,
+    throwRange: 80,
     rangedRatio: 0.4,
     projectile: {
       sprite: 'enemy:mushroom:proj:spore',
-      speed: 4,
+      speed: 1.4,
       damage: 10,
       splashRadius: 44,
       explosionLingerMs: 340,
@@ -227,23 +265,28 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     },
   },
   {
+    // Fast fragile swarmer: dies to one swing, pressures a kiting player with numbers.
     type: 'rat',
-    speed: 2.8,
-    health: 46,
+    speed: 1.1,
+    health: 22,
+    attackDamage: 6,
     hitboxHalfWidth: 9,
     hitboxHeight: 16,
   },
   {
+    // Slow tank: soaks hits and punishes anyone who lets it corner them.
     type: 'slime',
-    speed: 1.6,
-    health: 50,
+    speed: 0.55,
+    health: 60,
+    attackDamage: 10,
     hitboxHalfWidth: 18,
     hitboxHeight: 24,
   },
   {
+    // The chaser: faster than the base walk-away pace so kiting isn't free.
     type: 'bat',
-    speed: 2.8,
-    health: 35,
+    speed: 1.15,
+    health: 25,
     attackDamage: 5,
     hitboxHalfWidth: 14,
     hitboxHeight: 24,
@@ -251,16 +294,17 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'flying_eye',
-    speed: 2.6,
-    health: 36,
+    speed: 0.9,
+    health: 30,
+    flies: true,
     hitboxHalfWidth: 16,
     hitboxHeight: 26,
     hitboxOriginY: 0.5,
-    throwRange: 280,
+    throwRange: 95,
     rangedRatio: 0.4,
     projectile: {
       sprite: 'enemy:flying_eye:proj:orb',
-      speed: 6,
+      speed: 2,
       damage: 10,
       splashRadius: 40,
       explosionLingerMs: 320,
@@ -269,8 +313,8 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
   },
   {
     type: 'mimic',
-    aggroRange: 135,
-    speed: 3.0,
+    aggroRange: 50,
+    speed: 1.0,
     commitForLife: true,
     health: 80,
     attackDamage: 20,
@@ -279,31 +323,36 @@ export const ZOMBIE_ENEMY_TYPES = Object.freeze([
     maxOnMap: 3,
   },
   {
-
     type: 'dragon',
     bossOnly: true,
-    speed: 1.4,
-    health: 1000,
+    speed: 0.65,
+    // Solo baseline; zombie mode adds healthPerExtraPlayer per extra player at summon.
+    health: 1600,
+    healthPerExtraPlayer: 600,
+    attackDamage: 15,
 
     knockbackResist: true,
     flies: true,
     commitForLife: true,
-    aggroRange: 1600,
-    hitboxHalfWidth: 26,
-    hitboxHeight: 34,
+    // Hunts from anywhere and always swaps to the closest player, so it never idles at spawn or chases one runner while others shoot it.
+    aggroRange: Infinity,
+    retargetNearest: true,
+    // Wide enough that shots at the larger boss sprite actually connect.
+    hitboxHalfWidth: 30,
+    hitboxHeight: 44,
     hitboxOriginY: 0.6,
     maxOnMap: 1,
-    throwRange: 350,
+    throwRange: 120,
     rangedRatio: 1,
     projectile: {
-      // Firebolt: flies to the target's spot, then explodes with splash damage.
+      // Flies to the target's spot, then explodes with splash damage.
       sprite: 'enemy:dragon:proj:fire',
-      scale: 2.2,
-      speed: 6,
-      damage: 20,
-      splashRadius: 70,
+      scale: 1.8,
+      speed: 2,
+      damage: 24,
+      splashRadius: 60,
       explosionLingerMs: 640,
-      cooldownMs: 2500,
+      cooldownMs: 2000,
     },
   },
 ]);
@@ -314,24 +363,21 @@ export const ASSET_MANIFESTS = Object.freeze({
   players: 'assets/players/players.json',
 });
 
-// Validates that the game modes in the maps manifest match the server constants.
+// Fails fast when the maps manifest and the server constants disagree on modes.
 export function assertGameModesMatchManifest(mapsManifest) {
   const manifestModes = new Set(Object.keys(mapsManifest?.modes ?? {}));
   const constantModes = Object.values(GAME_MODES);
 
-  // Check that every game mode defined in the server code exists in the manifest
   for (const mode of constantModes) {
     if (!manifestModes.has(mode)) {
       throw new Error(`Game mode "${mode}" is missing from maps manifest.`);
     }
   }
-  // Check that the manifest doesn't contain any unknown game modes
   for (const mode of manifestModes) {
     if (!VALID_GAME_MODES.has(mode)) {
       throw new Error(`Maps manifest contains unknown game mode "${mode}".`);
     }
   }
-  // Ensure both the manifest and the server agree on the default game mode
   if (mapsManifest.defaultMode !== DEFAULT_GAME_MODE) {
     throw new Error(
       `Maps manifest defaultMode must be "${DEFAULT_GAME_MODE}", got "${mapsManifest.defaultMode}".`,
