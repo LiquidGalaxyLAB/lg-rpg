@@ -19,6 +19,18 @@
             "teamBSpawn": "team2_spawn",
             "captureZone": "capture_zone"
           },
+          "decals": [
+            {
+              "name": "lg",
+              "key": "decal:pvp3:lg",
+              "path": "maps/shared_assets/decor/liquid_galaxy_logo.png"
+            },
+            {
+              "name": "gsoc",
+              "key": "decal:pvp3:gsoc",
+              "path": "maps/shared_assets/decor/gsoc_logo.png"
+            }
+          ],
           "tilesets": [
             {
               "name": "TilesetFloor",
@@ -71,6 +83,18 @@
             "teamBSpawn": "team2_spawn",
             "captureZone": "capture_zone"
           },
+          "decals": [
+            {
+              "name": "lg",
+              "key": "decal:pvp5:lg",
+              "path": "maps/shared_assets/decor/liquid_galaxy_logo.png"
+            },
+            {
+              "name": "gsoc",
+              "key": "decal:pvp5:gsoc",
+              "path": "maps/shared_assets/decor/gsoc_logo.png"
+            }
+          ],
           "tilesets": [
             {
               "name": "TilesetFloor",
@@ -130,6 +154,18 @@
             "enemySpawn": "enemy_spawn",
             "bossSpawn": "boss_spawn"
           },
+          "decals": [
+            {
+              "name": "lg",
+              "key": "decal:zombie3:lg",
+              "path": "maps/shared_assets/decor/liquid_galaxy_logo.png"
+            },
+            {
+              "name": "gsoc",
+              "key": "decal:zombie3:gsoc",
+              "path": "maps/shared_assets/decor/gsoc_logo.png"
+            }
+          ],
           "tilesets": [
             {
               "name": "TilesetFloor",
@@ -208,6 +244,12 @@
               "key": "tileset:zombie3:6276:TilesetVillageAbandoned",
               "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetVillageAbandoned.png",
               "firstgid": 6276
+            },
+            {
+              "name": "TilesetWater",
+              "key": "tileset:zombie3:6516:TilesetWater",
+              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetWater.png",
+              "firstgid": 6516
             }
           ]
         },
@@ -216,18 +258,27 @@
           "path": "maps/zombie/zombie_raid_map_5_screen.tmj",
           "layers": {
             "ground": "grass_layer",
-            "river": "river",
-            "rocks": "rocks",
-            "bridge": "bridge",
-            "bars": "bars",
-            "village": "village",
-            "rightSide": "right_side"
+            "tree": "tree_layer",
+            "rock": "rock_layer",
+            "divider": "Divider"
           },
           "objectLayers": {
             "playerSpawn": "player_spawn",
             "enemySpawn": "enemy_spawn",
             "bossSpawn": "boss_spawn"
           },
+          "decals": [
+            {
+              "name": "lg",
+              "key": "decal:zombie5:lg",
+              "path": "maps/shared_assets/decor/liquid_galaxy_logo.png"
+            },
+            {
+              "name": "gsoc",
+              "key": "decal:zombie5:gsoc",
+              "path": "maps/shared_assets/decor/gsoc_logo.png"
+            }
+          ],
           "tilesets": [
             {
               "name": "SpriteSheet16x16",
@@ -308,40 +359,34 @@
               "firstgid": 2429
             },
             {
-              "name": "TilesetDesert-1.png (2)",
-              "key": "tileset:zombie5:6525:TilesetDesert_1_png_2",
-              "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetDesert-1.png",
+              "name": "BlueGem",
+              "key": "tileset:zombie5:6525:BlueGem",
+              "path": "maps/shared_assets/lucifer_pickups/gems/BlueGem.png",
               "firstgid": 6525
             },
             {
-              "name": "BlueGem",
-              "key": "tileset:zombie5:6765:BlueGem",
-              "path": "maps/shared_assets/lucifer_pickups/gems/BlueGem.png",
-              "firstgid": 6765
-            },
-            {
               "name": "OrangeGem",
-              "key": "tileset:zombie5:6774:OrangeGem",
+              "key": "tileset:zombie5:6534:OrangeGem",
               "path": "maps/shared_assets/lucifer_pickups/gems/OrangeGem.png",
-              "firstgid": 6774
+              "firstgid": 6534
             },
             {
               "name": "PinkGem",
-              "key": "tileset:zombie5:6783:PinkGem",
+              "key": "tileset:zombie5:6543:PinkGem",
               "path": "maps/shared_assets/lucifer_pickups/gems/PinkGem.png",
-              "firstgid": 6783
+              "firstgid": 6543
             },
             {
               "name": "PileOfGold",
-              "key": "tileset:zombie5:6791:PileOfGold",
+              "key": "tileset:zombie5:6551:PileOfGold",
               "path": "maps/shared_assets/lucifer_pickups/gold/PileOfGold.png",
-              "firstgid": 6791
+              "firstgid": 6551
             },
             {
               "name": "TilesetWater",
-              "key": "tileset:zombie5:6799:TilesetWater",
+              "key": "tileset:zombie5:6559:TilesetWater",
               "path": "maps/shared_assets/ninja_adventure/tilesets/TilesetWater.png",
-              "firstgid": 6799
+              "firstgid": 6559
             }
           ]
         }
