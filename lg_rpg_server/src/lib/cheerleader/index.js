@@ -1,9 +1,9 @@
-// Coordinates the AI cheerleader commentator using Gemini for text generation and Microsoft Edge TTS for the voice.
+// AI cheerleader commentator: Gemini for the text, Microsoft Edge TTS for the voice.
 import https from 'https';
 import { webcrypto } from 'crypto';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
-// Node 16 has no global `crypto`; msedge-tts 2.x uses the Web Crypto API (crypto.subtle / getRandomValues) as a global.
+// Node 16 has no global `crypto`, which msedge-tts 2.x expects (crypto.subtle / getRandomValues).
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import { CHEERLEADER } from '../../../game_constants.js';
 import { MODELS, VOICES, buildSummary, banterPrompt, introPrompt } from './personas.js';
@@ -11,14 +11,13 @@ import { MODELS, VOICES, buildSummary, banterPrompt, introPrompt } from './perso
 const GEMINI_HOST = 'generativelanguage.googleapis.com';
 const GEN_PATH = (model, key) => `/v1beta/models/${model}:generateContent?key=${key}`;
 
-// Checks if the cheerleader commentary is enabled and Gemini API key is configured.
+// The Gemini key if commentary is switched on and configured, else null.
 function isEnabled() {
   const flag = String(process.env.CHEERLEADER_ENABLED || '').toLowerCase();
   const key = (process.env.GEMINI_API_KEY || '').trim();
   return (flag === '1' || flag === 'true') && key ? key : null;
 }
 
-// Generates commentary dialogue text using the Gemini API.
 async function generateText(key, prompt) {
   return new Promise((resolve) => {
     const body = JSON.stringify({
@@ -54,10 +53,10 @@ async function generateText(key, prompt) {
 const EDGE_FORMAT = OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3;
 const EDGE_TIMEOUT_MS = 15000;
 
-// Escapes model text so it can't break the SSML document Edge TTS builds around it.
+// Keeps model text from breaking the SSML document Edge TTS builds around it.
 const escapeXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// Converts dialogue text into speech audio (base64 MP3) using Microsoft Edge TTS service.
+// Dialogue text -> base64 MP3, via Edge TTS.
 async function generateAudio(text, voiceId) {
   let tts;
   try {
@@ -91,7 +90,7 @@ async function generateAudio(text, voiceId) {
   });
 }
 
-// Maps raw game events to human-readable summaries for the AI model.
+// Raw game events -> human-readable summaries for the model.
 const EVENT_MAPPERS = {
   match_start: () => 'the match kicked off',
   kill: (d) => `${d.name} got a kill (${d.kills} total)`,
@@ -101,15 +100,15 @@ const EVENT_MAPPERS = {
   match_won: (d) => {
     if (!d.scores) return 'the squad survived and won the match';
     const score = `Blue ${d.scores.teamA ?? 0} - Red ${d.scores.teamB ?? 0}`;
-    if (!d.winner) return `the round ended in a draw, ${score}`;
     return `${d.winner === 'teamA' ? 'Blue' : 'Red'} team won the round, ${score}`;
   },
+  match_draw: (d) => `the round ended in a draw, Blue ${d.scores?.teamA ?? 0} - Red ${d.scores?.teamB ?? 0}`,
   match_lost: () => 'the squad was wiped out',
 };
 
 const summarize = (events) => events.map((ev) => EVENT_MAPPERS[ev.type]?.(ev.data || {})).filter(Boolean).join('; ');
 
-// Parses model output text into individual lines spoken by characters.
+// Splits model output into per-speaker lines.
 function parseBanter(text) {
   const out = [];
   for (const raw of text.split('\n')) {
@@ -120,7 +119,6 @@ function parseBanter(text) {
   return out;
 }
 
-// Factory function that creates the cheerleader commentator state machine.
 export function createCheerleader({ drain, play, getMatchContext }) {
   const key = isEnabled();
   if (!key) return null;
@@ -128,7 +126,7 @@ export function createCheerleader({ drain, play, getMatchContext }) {
   let introTimer, tickTimer, running = false, commentaryChain = Promise.resolve(), tickQueued = false;
   const transcript = [];
 
-  // Chains commentary actions to run sequentially and avoid overlapping voice clips.
+  // Serialises commentary so voice clips never overlap.
   const enqueueCommentary = (label, task) =>
     commentaryChain = commentaryChain.catch(() => { }).then(task).catch((err) => console.warn(`[cheerleader] ${label} failed:`, err?.message || err));
 
@@ -143,7 +141,7 @@ export function createCheerleader({ drain, play, getMatchContext }) {
     if (transcript.length > CHEERLEADER.maxTranscript) transcript.shift();
   };
 
-  // Builds the prompt summary plus the mode id, so prompts can select mode facts.
+  // Summary plus the mode id, so prompts can select the right mode facts.
   const matchSummary = (recentEvent) => {
     const ctx = getMatchContext();
     return { summary: buildSummary({ ...ctx, recentEvent }), modeId: ctx.modeId };
@@ -159,7 +157,7 @@ export function createCheerleader({ drain, play, getMatchContext }) {
     const text = await generateText(key, prompt);
     if (!running) return;
     const banter = parseBanter(text);
-    // Speak whatever parsed; dropping short output silently left the commentator dead for a whole tick.
+    // Speak whatever parsed — dropping short output silently left the booth dead for a whole tick.
     if (!banter.length) {
       if (text.trim()) console.warn('[cheerleader] unparseable model output, skipping this beat:', text.slice(0, 120));
       return;
@@ -191,21 +189,19 @@ export function createCheerleader({ drain, play, getMatchContext }) {
   };
 
   return {
-    // Starts commentary timers for match intro and regular updates.
     start() {
       if (running) return;
       running = true;
       introTimer = setTimeout(() => enqueueCommentary('intro', doIntro), CHEERLEADER.introDelayMs);
       tickTimer = setInterval(queueTick, CHEERLEADER.tickMs);
     },
-    // Triggers final match commentary and clears timers.
+    // One last beat over the final state, then the timers stop.
     async finale() {
       if (!running) return;
       clearTimeout(introTimer); clearInterval(tickTimer);
       introTimer = tickTimer = null;
       await enqueueCommentary('finale', doTick);
     },
-    // Stops all timers and clears commentator state.
     stop() {
       running = tickQueued = false;
       clearTimeout(introTimer); clearInterval(tickTimer);
