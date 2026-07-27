@@ -56,7 +56,12 @@ class SshService implements ISshService {
     _port = port;
 
     final generation = _connectionGeneration;
-    await _establishConnection(generation);
+    try {
+      await _establishConnection(generation);
+    } catch (_) {
+      if (generation != _connectionGeneration) rethrow;
+      await _establishConnection(generation);
+    }
     _startHealthCheck();
   }
 
@@ -94,7 +99,9 @@ class SshService implements ISshService {
       _isHealthy = true;
       _healthStrikes = 0;
     } catch (e) {
-      _client = null;
+      // Close, don't just drop: a timed-out handshake otherwise keeps its
+      // socket open and can shadow the retry's fresh connection.
+      _closeClient();
       _isHealthy = false;
       log.e('SSH Connect Error: $e');
       rethrow;

@@ -60,7 +60,6 @@ class SpriteDef {
   const SpriteDef(this.asset, this.frames);
 }
 
-/// A special attack in a character's kit. Ids present in the server's PLAYER_RANGED fire projectiles; `stub` ones just swing melee for now.
 class SpecialDef {
   final String id;
   final String label;
@@ -140,11 +139,11 @@ abstract final class LoadoutConfig {
 
 abstract final class PowerupCatalog {
   static const items = <LoadoutItemDef>[
-    LoadoutItemDef('speed', 'Speed', '⚡', '2.9× move speed for 10s.', 25000),
+    LoadoutItemDef('speed', 'Speed', '⚡', '1.8× move speed for 10s.', 25000),
     LoadoutItemDef(
-        'shield', 'Shield', '🛡', 'Immune to enemy damage for 15s.', 35000),
+        'shield', 'Shield', '🛡', 'Immune to enemy damage for 8s.', 45000),
     LoadoutItemDef('reflect', 'Reflect', '↩',
-        'Bounce enemy damage back doubled, 15s.', 40000),
+        'Take half damage, bounce it back doubled, 10s.', 40000),
     LoadoutItemDef('power', '2× Damage', '💥',
         'Double your attack damage for 10s.', 30000),
   ];
@@ -174,27 +173,27 @@ abstract final class CharacterCatalog {
       idleSprite: SpriteDef('assets/sprites/huntress/idle.png', 10),
       maxHealth: 100,
       basicLabel: 'Arrow',
-      basicDamage: 35,
+      basicDamage: 18,
       basicCooldownMs: 500,
       basicNote: 'Single target',
       specials: [
         SpecialDef('fire', 'Fire', '🔥', 4000,
-            damage: 70,
+            damage: 60,
             dmgNote: 'splash',
             desc: 'Splash burst — one-shots basic zombies.',
             sprite: SpriteDef('assets/sprites/huntress/proj_fire.png', 4)),
         SpecialDef('poison', 'Acid', '☠', 4000,
-            damage: 28,
+            damage: 44,
             dmgNote: 'burn',
             desc: 'Light hit, then burns over time.',
             sprite: SpriteDef('assets/sprites/huntress/proj_poison.png', 6)),
         SpecialDef('magic', 'Magic', '✦', 3500,
-            damage: 50,
+            damage: 40,
             dmgNote: 'pierce',
             desc: 'Pierces a line of enemies.',
             sprite: SpriteDef('assets/sprites/huntress/proj_magic.png', 4)),
         SpecialDef('ghost', 'Ghost', '👻', 5000,
-            damage: 50,
+            damage: 45,
             dmgNote: 'homing',
             desc: 'Slow homing orb with splash.',
             sprite: SpriteDef('assets/sprites/huntress/proj_ghost.png', 6)),
@@ -205,23 +204,31 @@ abstract final class CharacterCatalog {
       displayName: 'Water Priestess',
       role: 'Attacker',
       blurb:
-          'Melee bruiser — swings hit everything up close. Specials coming soon.',
+          'Melee bruiser — swings hit everything up close, specials cover burst, reach and sustain.',
       basicIcon: '🗡',
       idleSprite: SpriteDef('assets/sprites/water_priestess/idle.png', 8),
       maxHealth: 100,
       basicLabel: 'Swing',
-      basicDamage: 15,
+      basicDamage: 20,
       basicCooldownMs: 350,
       basicNote: 'Hits all nearby',
       specials: [
         SpecialDef('tide', 'Tide Slam', '🌊', 4000,
-            stub: true, desc: 'Reserved — swings for now.'),
+            damage: 90,
+            dmgNote: '3 hits',
+            desc: 'Three slams in place — 90 total to everything in reach.'),
         SpecialDef('riptide', 'Riptide', '💧', 4000,
-            stub: true, desc: 'Reserved — swings for now.'),
+            damage: 25,
+            dmgNote: 'dash',
+            desc: 'Dash forward, cutting through everything you pass.'),
         SpecialDef('frost', 'Frost Nova', '❄', 5000,
-            stub: true, desc: 'Reserved — swings for now.'),
+            damage: 45,
+            dmgNote: 'slow',
+            desc: 'Three novas at double reach — halves enemy speed for 3s.'),
         SpecialDef('blessing', 'Blessing', '✨', 6000,
-            stub: true, desc: 'Reserved — swings for now.'),
+            damage: 0,
+            dmgNote: 'heal',
+            desc: 'Heal 30; nearby enemies hit everyone for half for 6s.'),
       ],
     ),
   ];
