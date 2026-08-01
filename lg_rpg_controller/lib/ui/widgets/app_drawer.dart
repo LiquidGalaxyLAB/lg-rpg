@@ -115,6 +115,12 @@ class AppDrawer extends ConsumerWidget {
               selected: current == NavigationIndex.settings,
               onTap: () => go(NavigationIndex.settings),
             ),
+            _DrawerItem(
+              icon: Icons.info_outline_rounded,
+              label: 'About',
+              selected: current == NavigationIndex.about,
+              onTap: () => go(NavigationIndex.about),
+            ),
             const Spacer(),
             const Divider(),
             const Padding(

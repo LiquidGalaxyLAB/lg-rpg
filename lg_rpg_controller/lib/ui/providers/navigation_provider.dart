@@ -10,6 +10,7 @@ abstract final class NavigationIndex {
   static const lgTask = 5;
   static const inventory = 6;
   static const map = 7;
+  static const about = 8;
 }
 
 class NavigationNotifier extends StateNotifier<int> {

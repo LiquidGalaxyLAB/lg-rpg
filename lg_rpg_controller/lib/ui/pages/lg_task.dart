@@ -22,8 +22,13 @@ class _LgTaskState extends ConsumerState<LgTask> {
     showAppSnack(context, message);
   }
 
-  /// Rebooting restarts the whole rig, so make that explicit rather than surprising someone mid-demo.
-  Future<bool> _confirmReboot(String title, String detail) async {
+  /// Reboot and shutdown take the whole rig down, so make that explicit rather
+  /// than surprising someone mid-demo.
+  Future<bool> _confirmRigAction(
+    String title,
+    String detail,
+    String confirmLabel,
+  ) async {
     final p = context.palette;
     final ok = await showDialog<bool>(
       context: context,
@@ -38,7 +43,7 @@ class _LgTaskState extends ConsumerState<LgTask> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Reboot rig', style: TextStyle(color: p.danger)),
+            child: Text(confirmLabel, style: TextStyle(color: p.danger)),
           ),
         ],
       ),
@@ -150,10 +155,11 @@ class _LgTaskState extends ConsumerState<LgTask> {
                 loading: _busyTask == 'reboot',
                 onPressed: (connected && idle)
                     ? () async {
-                        final ok = await _confirmReboot(
+                        final ok = await _confirmRigAction(
                           'Reboot the rig?',
                           'Every machine restarts. This takes a couple of '
                               'minutes.',
+                          'Reboot rig',
                         );
                         if (!ok) return;
                         await _run(
@@ -167,6 +173,37 @@ class _LgTaskState extends ConsumerState<LgTask> {
                           },
                           'Rebooting all machines',
                           'Reboot failed',
+                        );
+                      }
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Shutdown',
+                icon: Icons.power_off_rounded,
+                variant: AppButtonVariant.danger,
+                loading: _busyTask == 'shutdown',
+                onPressed: (connected && idle)
+                    ? () async {
+                        final ok = await _confirmRigAction(
+                          'Shut the rig down?',
+                          'Every machine powers off. Someone has to switch '
+                              'them back on by hand.',
+                          'Shut down rig',
+                        );
+                        if (!ok) return;
+                        await _run(
+                          'shutdown',
+                          () async {
+                            final accepted = await ref
+                                .read(shutdownLgUseCaseProvider)
+                                .call();
+                            if (!accepted) {
+                              throw Exception('rig did not accept');
+                            }
+                          },
+                          'Shutting down all machines',
+                          'Shutdown failed',
                         );
                       }
                     : null,
