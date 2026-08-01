@@ -115,7 +115,7 @@
         "height": 73
       },
       "render": {
-        "scale": 1.4,
+        "scale": 0.78,
         "origin": {
           "x": 0.5,
           "y": 0.6
@@ -165,7 +165,7 @@
       "displayName": "Mimic",
       "textureKeyPrefix": "enemy:mimic",
       "frame": { "width": 146, "height": 146 },
-      "render": { "scale": 0.68, "origin": { "x": 0.5, "y": 0.568 } },
+      "render": { "scale": 0.68, "origin": { "x": 0.5, "y": 0.568 }, "bodyHeight": 34 },
       "defaultAnimation": "idle_closed",
       "animations": {
         "idle_closed":      { "path": "enemies/mimic/idle_closed.png",      "frames": 1,  "frameRate": 1,  "repeat": -1 },
