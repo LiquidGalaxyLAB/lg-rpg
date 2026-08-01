@@ -15,19 +15,13 @@ dependencies:
   dartssh2: ^2.10.0
 
   flutter_secure_storage: ^10.0.0
-  shared_preferences: ^2.2.3
-  flutter_dotenv: ^6.0.0
 
   socket_io_client: ^2.0.3+1
-
-  mobile_scanner: ^7.0.0
-  permission_handler: ^12.0.1
 
   uuid: ^4.4.0
   equatable: ^2.0.5
   logger: ^2.6.2
 
-  cupertino_icons: ^1.0.6
   flutter_joystick: ^0.2.2
   google_fonts: ^6.2.1
   google_maps_flutter: ^2.17.1
