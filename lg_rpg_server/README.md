@@ -1,44 +1,38 @@
 # LG RPG Server
 
-The game server for the [Liquid Galaxy RPG](https://github.com/LiquidGalaxyLAB/lg-rpg) project. It serves a [Phaser 4](https://phaser.io/) web client to LG screens and manages real-time multiplayer state via [Socket.IO](https://socket.io/).
+The game server for the [Liquid Galaxy RPG](https://github.com/LiquidGalaxyLAB/lg-rpg) project. It serves the browser game to the LG screens and runs the authoritative multiplayer simulation.
 
 ---
 
 ## Stack
 
-| Technology | Version | Purpose |
-|---|---|---|
-| [Node.js](https://nodejs.org/) | 16.20.2 | Runtime (pinned via Volta) |
-| [Express](https://expressjs.com/) | ^4.19 | Static file serving + REST API |
-| [Socket.IO](https://socket.io/) | ^4.8 | Real-time WebSocket multiplayer |
-| [Phaser](https://phaser.io/) | ^4.1 | Browser-side game engine (runs on LG screens) |
-| [lowdb](https://github.com/typicode/lowdb) | ^6.1 | Lightweight JSON persistence |
-| [easystarjs](https://github.com/prettymuchbryce/easystarjs) | ^0.4 | A* pathfinding |
-| [qrcode](https://github.com/soldair/node-qrcode) | ^1.5 | QR code generation for server URL |
-| [dotenv](https://github.com/motdotla/dotenv) | ^17 | Environment variable loading |
+Node.js 16 with [Express](https://expressjs.com/) for static files and a small REST surface, and [Socket.IO](https://socket.io/) for real-time multiplayer. The browser client is [Phaser 4](https://phaser.io/), loaded from a CDN in `public/index.html` — so the LG machine needs internet access the first time the screens open the game. The AI cheerleader uses Google Gemini for its lines and Microsoft Edge TTS for the voice.
+
+Exact dependency versions live in `package.json`.
 
 ---
 
 ## Setup
 
-The Flutter controller expects the server to be accessible at `~/lg-rpg-server/` on the Liquid Galaxy machine. From the root of the cloned repository:
+The Flutter controller expects the server at `~/lg-rpg-server/` on the Liquid Galaxy machine:
 
 ```bash
-# From the project root on the LG machine
 ln -s ~/lg-rpg/lg_rpg_server ~/lg-rpg-server
 cd ~/lg-rpg-server
 cp .env.example .env
 npm install
 ```
 
-### Environment Variables
+### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `3000` | Port the server listens on |
+| `PORT` | `8111` | Port the server listens on (whitelisted on the LG firewall) |
 | `TOTAL_SCREENS` | `3` | Number of LG screens (used for map selection) |
 | `MAX_PLAYERS` | `4` | Maximum concurrent players in a lobby |
 | `CORS_ORIGIN` | `*` | Allowed CORS origins for Socket.IO |
+| `CHEERLEADER_ENABLED` | `true` | Turn the AI commentary duo on or off |
+| `GEMINI_API_KEY` | — | Key from [Google AI Studio](https://aistudio.google.com/apikey); without it the commentary stays silent |
 
 ---
 
@@ -49,70 +43,57 @@ npm start          # production
 npm run dev        # development with nodemon auto-reload
 ```
 
-Verify the server is up:
+You should see `Server is running at port 8111`. Check it from anywhere on the network:
 
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:8111/api/health
 # → {"ok":true}
 ```
 
----
-
-## API Endpoints
-
-| Method | Path | Response |
-|---|---|---|
-| `GET` | `/api/health` | `{ "ok": true }` — liveness check |
-| `GET` | `/api/config` | Server config: screen count, max players, selected mode, map |
+Logs are mirrored to `logs/server.log`.
 
 ---
 
-## Game Modes
+## Game modes
 
 | ID | Label | Description |
 |---|---|---|
-| `pvp` | PvP Mode | Players compete against each other |
-| `zombie` | Zombie Mode | Survival co-op |
+| `zombie` | Zombie Mode | Co-op survival against waves of enemies. This is the default. |
+| `pvp` | PvP Mode | Zone Capture — two teams fight to hold zones and score over a set of rounds. |
 
-The lobby host selects the mode from the Flutter controller before starting the game.
-
----
-
-## Socket Events
-
-| Event | Direction | Payload | Description |
-|---|---|---|---|
-| `joinLobby` | Client → Server | `{ playerId, name }` | Join or re-join the lobby |
-| `leaveLobby` | Client → Server | `{ playerId }` | Leave the lobby |
-| `selectGameMode` | Client → Server | `{ mode }` | Host selects a game mode |
-| `startGame` | Client → Server | — | Host starts the game |
-| `move` | Client → Server | `{ playerId, dx, dy }` | Send movement delta (−1 to 1) |
-| `updateLobby` | Server → All | `{ players, hostId, selectedMode }` | Current lobby state |
-| `gameStarted` | Server → All | `{ selectedMode, map, startedBy }` | Game has started |
-| `gameState` | Server → All | `{ players: [{ playerId, name, x, y }] }` | 60 Hz position tick |
-| `lobbyError` | Server → Client | `{ message }` | Error for invalid actions |
+The lobby host picks the mode from the Flutter controller before starting the match. Each mode has its own maps under `public/assets/maps/<mode>/`, selected by screen count.
 
 ---
 
 ## Scripts
 
-Located in `scripts/` and invoked remotely by the Flutter controller over SSH:
+Located in `scripts/` and invoked remotely by the Flutter controller over SSH. Every argument is optional and falls back to the default shown.
 
-| Script | Description |
-|---|---|
-| `start-server.sh <screens>` | Start the Node server (idempotent — skips if already running) |
-| `stop-server.sh` | Kill the running Node server process |
-| `launch-browsers.sh <screens>` | Open Chromium on each LG screen pointing to the game |
-| `close-browsers.sh <screens>` | Close Chromium on all screens |
+| Script | Arguments | Description |
+|---|---|---|
+| `start-server.sh` | `<screens=3> <port=8111>` | Start the Node server (idempotent — skips if already running on the same screen count) |
+| `stop-server.sh` | — | Kill the running Node server process |
+| `launch-browsers.sh` | `<screens=3> <port=8111> <server-ip> <ssh-password=lg>` | Open Chromium on each LG screen pointing to the game |
+| `close-browsers.sh` | `<screens=3> <ssh-password=lg>` | Close Chromium on all screens |
+
+---
+
+## Client/server protocol
+
+The Socket.IO event names, game phases, and the shared loadout/character catalogs are defined once in `public/shared_constants.js` and imported by the server, the browser client, and mirrored in the controller app. Read that file rather than a table here — it is the source of truth.
+
+The only HTTP endpoints are `GET /api/health` (liveness) and `GET /api/config` (bootstrap config the browser client fetches on load).
 
 ---
 
 ## Firewall
 
-Port 3000 is blocked by default on Liquid Galaxy Ubuntu machines and resets to blocked on every reboot. Before starting the server after any reboot, run:
+Liquid Galaxy Ubuntu machines block all non-whitelisted ports with `iptables`, and those rules reset on every reboot. The server runs on **8111**, which is whitelisted on a stock rig, so there is nothing to do here — the port is open out of the box.
+
+This only becomes a problem if you override `PORT` to something outside the whitelist. In that case, open it after every reboot:
 
 ```bash
-sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT
+sudo iptables -I INPUT 1 -p tcp --dport <PORT> -j ACCEPT
 ```
 
-The Flutter controller automates this step when **Start Server** is tapped. See the [root README networking section](../README.md#networking-known-issues) for full diagnosis and fix details.
+The Flutter controller also inserts this rule when **Start Server** is tapped. See **[ISSUES.md](../ISSUES.md)** for networking diagnosis and fixes.

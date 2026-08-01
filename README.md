@@ -19,7 +19,7 @@ A real-time multiplayer RPG built for [Liquid Galaxy](https://www.liquidgalaxy.e
         │                                           │
         │  ┌──────────────┐   ┌───────────────────┐│
         │  │  Node.js     │◄──│  Chromium         ││
-        │  │  Server :3000│   │  (across screens) ││
+        │  │  Server :8111│   │  (across screens) ││
         │  └──────┬───────┘   └───────────────────┘│
         └─────────┼──────────────────────────────────┘
                   │ Socket.IO (WebSocket)
@@ -31,74 +31,54 @@ A real-time multiplayer RPG built for [Liquid Galaxy](https://www.liquidgalaxy.e
 
 ---
 
-## Prerequisites
+## Installation
 
-### On the Liquid Galaxy machine
+Installation happens once, on the **Liquid Galaxy master** (Ubuntu 16.04). After
+that, everything — starting/stopping the server and launching the LG screens —
+is driven from the controller app.
 
-- Node.js v16.20.2 (via [nvm](https://github.com/nvm-sh/nvm) or [Volta](https://volta.sh/))
-- `npm`
-- `curl` (for the server health-check script)
+### 1. Install Node.js 16 via nvm (on the LG master)
 
-### On the player's phone
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.nvm/nvm.sh
+nvm install 16
+nvm alias default 16
+node -v    # must print v16.x
+npm -v     # must print 8.x
+```
 
-- Android 5.0+ device
-- Flutter SDK ≥ 3.0.0 (only if building from source)
+### 2. Get the code
 
----
-
-## Setup
-
-You only install things once. After that, everything — starting/stopping the
-server, opening the firewall port, and launching the LG screens — is driven from
-the controller app. You don't normally touch a terminal on the rig.
-
-### 1. Install the server (one-time, on the Liquid Galaxy machine)
-
-The controller expects the server scripts at `~/lg-rpg-server/scripts/`, so clone
-the repo and create that symlink:
+If a previous install exists and you want a clean reinstall, first run:
+`pkill -9 -f server.js; sudo rm -rf ~/lg-rpg`
 
 ```bash
 git clone https://github.com/LiquidGalaxyLAB/lg-rpg.git ~/lg-rpg
-ln -s ~/lg-rpg/lg_rpg_server ~/lg-rpg-server
+ln -sfn ~/lg-rpg/lg_rpg_server ~/lg-rpg-server
 cd ~/lg-rpg-server
-cp .env.example .env       # configure it — see below
 npm install
+cp .env.example .env
 ```
 
-That's it on the LG side — **don't** start the server or open the port by hand;
-the controller does both for you (next section).
+The `~/lg-rpg-server` symlink is required — the controller app expects the
+server at that path.
 
-### Configuration (`.env`)
+### 3. Verify the server — do not skip this step
 
-| Variable | Purpose |
-|---|---|
-| `PORT` | Server port (default `3000`). |
-| `TOTAL_SCREENS` | Number of LG screens (game screens + 1 leaderboard screen). |
-| `MAX_PLAYERS` | Max players allowed in a lobby. |
-| `CORS_ORIGIN` | Allowed web origin (`*` is fine for a local rig). |
+```bash
+source ~/.nvm/nvm.sh
+cd ~/lg-rpg-server
+node server.js
+```
 
-#### AI Cheerleader (optional)
+You must see the line `Server is running at port 8111`. Press `Ctrl+C` and
+continue. Don't leave it running — the controller app starts and stops the
+server for you.
 
-The game ships with an AI commentary duo (Curly & Julie) that reacts to the match
-live. It's **optional** — the game runs fine without it. It uses **Google Gemini**
-to write the dialogue and **AWS Polly** to voice it, so it needs API keys:
+### 4. Install the controller app (on your phone)
 
-| Variable | Purpose |
-|---|---|
-| `CHEERLEADER_ENABLED` | Set to `true` to turn the commentary on. |
-| `GEMINI_API_KEY` | Google Gemini API key — **required** for the cheerleader to run; without it the commentary stays off. |
-| `AWS_ACCESS_KEY_ID` | AWS access key for Polly text-to-speech. |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key for Polly. |
-| `AWS_REGION` | AWS region for Polly (defaults to `ap-south-1`). |
-
-Notes:
-- With `CHEERLEADER_ENABLED=true` **and** a valid `GEMINI_API_KEY`, the commentary turns on. If either is missing, it silently stays off and the game plays normally.
-- The Gemini key drives the **text**; the AWS keys drive the **voice**. If the AWS keys are missing, lines are still generated but go unvoiced (logged as a warning).
-- Get a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey), and AWS keys from the [AWS IAM console](https://console.aws.amazon.com/iam/) (the user needs `polly:SynthesizeSpeech` permission).
-
-### 2. Install the controller (on your phone)
-
-Install the APK, or build from source:
+Install the APK on your Android phone, or build from source:
 
 ```bash
 cd lg_rpg_controller
@@ -108,43 +88,65 @@ flutter run
 
 ---
 
-## Running a session (from the controller)
+## Configuration (`.env`) — optional
 
-1. Open the app → **Settings** → enter the LG machine's **IP, SSH username,
-   password, and screen count** → **Connect**.
-2. Tap **Start the Server**. This automatically opens port 3000 on the rig (it
-   injects the firewall rule over SSH) and starts the Node server.
-3. Tap **Launch Browser** to open the game across the LG screens.
-4. Go back to **Home** → **Connect to Server** → pick a mode → **Play**.
-5. When you're done, use **Stop the Server** and **Close Browser** from Settings.
+The game runs fine with the default `.env`. Editing `~/lg-rpg-server/.env` is
+only needed for the **AI cheerleader** — a live commentary duo that reacts to
+the match. To enable it, set:
 
-Because the controller opens the port every time you press **Start the Server**,
-the firewall self-heals after a reboot — no manual `iptables` step needed.
+- `CHEERLEADER_ENABLED=true`
+- `GEMINI_API_KEY=` your key from [Google AI Studio](https://aistudio.google.com/apikey)
 
----
-
-## Running the server manually (optional / for development)
-
-If you'd rather run the server yourself on the LG instead of from the controller,
-you must open the firewall port yourself first — this is the same rule the
-controller injects automatically:
-
-```bash
-sudo iptables -I INPUT 1 -p tcp --dport 3000 -j ACCEPT   # only needed for manual starts
-cd ~/lg-rpg-server
-npm start
-```
-
-The server is then available at `http://<LG-IP>:3000`. To make the port survive
-reboots without the controller, see [ISSUES.md](./ISSUES.md).
+If either is missing, the commentary stays off and the game plays normally. The
+voice uses free Microsoft Edge TTS — no extra key needed.
 
 ---
 
-## Networking: Known Issues
+## The controller app
 
-If a phone can't reach the server over the local network, it's usually one of three things: a hotspot routing trap, a VirtualBox adapter priority issue, or the firewall blocking port 3000 after a reboot.
+| Page | What it does |
+|---|---|
+| **Home** | Once connected to the server and master, select a game mode and press Play Game. |
+| **Loadout** | Pick your character and up to 4 items (power-ups + health) to use during matches. Each has a cooldown; tap a selected item again to deselect it. |
+| **Map** | Map and Google Earth sync — fly to locations with 3D KML and orbit. |
+| **LG Tasks** | Basic Liquid Galaxy tasks: show logo, clean KML, relaunch, reboot. |
 
-See **[ISSUES.md](./ISSUES.md)** for symptoms, checks, and fixes for each.
+---
+
+## Running the game
+
+1. Open the app → **Settings** → fill in the master's **IP**, **username** (`lg`),
+   **password**, **SSH port** (`22`), and **screen number** (**3 or 5 only**) →
+   **Connect to Master**.
+2. Tap **Start Server**. If anything is wrong (Node missing, invalid screen
+   number, crashed server), a message saying exactly what failed appears within
+   a few seconds.
+3. Tap **Launch Browser** — the game appears across the LG screens.
+4. Go back to **Home** → enter your player name → **Connect to Server**.
+5. Select the game mode (the first player to connect is the host and picks the
+   mode) → **Play Game**.
+
+### Multiplayer
+
+- On **each** phone: **Settings** → same details (same screen number) → **Connect to Master**.
+- From **one** phone: **Start Server** → **Launch Browser**.
+- On **every** phone: **Home** → **Connect to Server**.
+- The first phone to connect is the host — it picks the mode (and teams, in PvP) and presses **Play Game**.
+
+### Changing the screen number (3 ↔ 5)
+
+Order matters:
+
+**Close Browser** → **Stop Server** → **Disconnect from Master** → enter the new
+screen number → **Connect to Master** → **Start Server** → **Launch Browser**.
+
+---
+
+## If something goes wrong
+
+Error messages in the app state the actual cause — read them first. Server logs
+live on the master in `~/lg-rpg-server/logs/`. For known issues and fixes, see
+**[ISSUES.md](./ISSUES.md)**.
 
 ---
 
@@ -153,9 +155,3 @@ See **[ISSUES.md](./ISSUES.md)** for symptoms, checks, and fixes for each.
 This project uses pixel-art assets created by independent artists under open licenses.
 
 See **[CREDITS.md](./CREDITS.md)** for the full list of contributors, asset links, and license details.
-
----
-
-## Repository
-
-[https://github.com/LiquidGalaxyLAB/lg-rpg](https://github.com/LiquidGalaxyLAB/lg-rpg)

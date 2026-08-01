@@ -9,6 +9,10 @@ import { deathBurst, spillShards, healPopup, sparkleBurst, updateShieldFx, updat
 // Map tile layers and decals render below every entity; the band is deep enough for any layer count.
 const MAP_DEPTH_BASE = -1000;
 
+// Keep map branding smaller than its Tiled box; GSoC gets a slight boost to match LG's visual footprint.
+const DECAL_SCALE_FACTOR = 0.8;
+const GSOC_SCALE_FACTOR = 0.88;
+
 // Visual-only boost over each manifest's render scale so characters read on the LG wall; server hitboxes are untouched, and projectiles are server-scaled instead.
 const ENTITY_SCALE_BOOST = 1.3;
 
@@ -155,7 +159,12 @@ async function startGame() {
           const box = map.getObjectLayer(d.name)?.objects?.[0];
           if (!box) { console.warn(`Decal box not found: ${d.name}`); return; }
           const img = this.add.image(0, 0, d.key).setOrigin(0.5);
-          const scale = Math.min(box.width / img.width, box.height / img.height);
+          const filter = d.name === 'gsoc'
+            ? Phaser.Textures.FilterMode.NEAREST
+            : Phaser.Textures.FilterMode.LINEAR;
+          img.texture.setFilter(filter);
+          const decalScaleFactor = d.name === 'gsoc' ? GSOC_SCALE_FACTOR : DECAL_SCALE_FACTOR;
+          const scale = Math.min(box.width / img.width, box.height / img.height) * decalScaleFactor;
           img.setDisplaySize(img.width * scale, img.height * scale);
           img.setPosition(box.x + box.width / 2 - this.cameraOffset, box.y + box.height / 2);
           img.setDepth(MAP_DEPTH_BASE + map.layers.length);
@@ -329,7 +338,7 @@ async function startGame() {
             death: anims.death ? `${prefix}:death` : null,
             hurt: anims.take_hit ? `${prefix}:take_hit` : anims.hurt ? `${prefix}:hurt` : null,
           },
-          scale: def.render.scale * ENTITY_SCALE_BOOST, origin: def.render.origin,
+          scale: def.render.scale * ENTITY_SCALE_BOOST, origin: def.render.origin, bodyHeight: def.render.bodyHeight ?? null,
         };
       }
 
