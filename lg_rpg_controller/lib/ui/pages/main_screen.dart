@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lg_rpg_controller/core/constant/game_constants.dart';
+import 'package:lg_rpg_controller/ui/pages/about_page.dart';
 import 'package:lg_rpg_controller/ui/pages/controller_page.dart';
 import 'package:lg_rpg_controller/ui/pages/home_page.dart';
 import 'package:lg_rpg_controller/ui/pages/inventory_page.dart';
@@ -25,6 +26,7 @@ class MainScreen extends ConsumerWidget {
     LgTask(),
     InventoryPage(),
     MapPage(),
+    AboutPage(),
   ];
 
   @override
