@@ -90,8 +90,9 @@ class AboutPage extends ConsumerWidget {
         leading: IconButton(
           tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () =>
-              ref.read(navigationProvider.notifier).setIndex(NavigationIndex.home),
+          onPressed: () => ref
+              .read(navigationProvider.notifier)
+              .setIndex(NavigationIndex.home),
         ),
       ),
       body: SafeArea(
@@ -166,7 +167,8 @@ class AboutPage extends ConsumerWidget {
                   child: Column(
                     children: [
                       for (var i = 0; i < group.assets.length; i++) ...[
-                        if (i > 0) const Divider(height: 1, indent: 18, endIndent: 18),
+                        if (i > 0)
+                          const Divider(height: 1, indent: 18, endIndent: 18),
                         _AssetRow(group.assets[i]),
                       ],
                     ],
