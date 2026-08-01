@@ -1,26 +1,24 @@
 // Client-side script for the right screen (leaderboard, commentary, and match timer display).
 import { SOCKET_EVENTS } from './shared_constants.js';
 import { initGameAudio } from './game_audio.js';
+import { rankPlayers } from './scene/ranking.js';
 
 const socket = io();
 const audio = initGameAudio(socket);
 const $ = (id) => document.getElementById(id);
 
-const state = { connected: false, modeLabel: 'Zombie Raid', players: [], match: null, pvp: null, final: null, announcement: null, boss: null };
+const state = { connected: false, mode: null, modeLabel: 'Zombie Raid', maxPlayers: 4, players: [], match: null, pvp: null, final: null, announcement: null, boss: null };
 
 const teamName = (t) => (t === 'teamA' ? 'Blue' : t === 'teamB' ? 'Red' : '—');
 
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const formatClock = (ms) => `${Math.floor(Math.max(0, Math.ceil(Number(ms || 0) / 1000)) / 60)}:${String(Math.max(0, Math.ceil(Number(ms || 0) / 1000)) % 60).padStart(2, '0')}`;
 const titleCase = (mode) => String(mode || 'Zombie Raid').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-// PvP ranks rows by team (leading team first); kills only break ties within a team.
+// PvP ranks the leading team first; tied team scores fall back to player stats.
 const ranked = (isPvp) => {
   const list = [...(state.final?.results || state.players)];
-  const byKillsThenName = (a, b) => Number(b.kills || 0) - Number(a.kills || 0) || String(a.name || '').localeCompare(String(b.name || ''));
-  if (!isPvp) return list.sort(byKillsThenName);
   const s = state.final?.scores || state.pvp?.scores || {};
-  const teamOrder = (s.teamA || 0) >= (s.teamB || 0) ? { teamA: 0, teamB: 1 } : { teamA: 1, teamB: 0 };
-  return list.sort((a, b) => (teamOrder[a.team] ?? 2) - (teamOrder[b.team] ?? 2) || byKillsThenName(a, b));
+  return rankPlayers(list, s, isPvp);
 };
 
 function renderStatus() {
@@ -64,7 +62,7 @@ function renderResult() {
     // Lobby / waiting state: show the roster fill instead of a dead 0:00 clock.
     const n = state.players.length;
     $('clockLabel').textContent = n === 0 ? 'Waiting for Players' : 'Lobby';
-    $('clockValue').textContent = `${n}/4`;
+    $('clockValue').textContent = `${n}/${state.maxPlayers}`;
     $('resultSub').textContent = n === 0
       ? 'Join on your phone to enter the raid'
       : 'Waiting for the host to start…';
@@ -90,9 +88,10 @@ function renderResult() {
 }
 
 function renderBoard() {
-  const isPvp = !!state.pvp || (!!state.final && 'winner' in state.final);
+  // Includes the selected mode so a PvP lobby already tags teams, before the first pvp state patch arrives.
+  const isPvp = state.mode === 'pvp' || !!state.pvp || (!!state.final && 'winner' in state.final);
   const rows = ranked(isPvp);
-  if ($('count')) $('count').textContent = `${rows.length}/4 Players`;
+  if ($('count')) $('count').textContent = `${rows.length}/${state.maxPlayers} Players`;
   if (rows.length === 0) {
     $('rows').innerHTML = `<div class="empty-message">${escapeHtml(state.announcement || 'Waiting for players...')}</div>`;
     return;
@@ -133,8 +132,8 @@ function showAnnouncement(message, durationMs = 3500) {
 // Music and commentary playback is handled by the shared game_audio module, not here.
 socket.on('connect', () => { state.connected = true; renderStatus(); });
 socket.on('disconnect', () => { state.connected = false; renderStatus(); });
-socket.on(SOCKET_EVENTS.UPDATE_LOBBY, (p = {}) => { if (!state.match && !state.final) { state.players = p.players || []; if (p.selectedMode) state.modeLabel = titleCase(p.selectedMode); render(); } });
-socket.on(SOCKET_EVENTS.GAME_STARTED, (p = {}) => { state.final = null; state.pvp = null; state.modeLabel = titleCase(p.selectedMode || state.modeLabel); render(); });
+socket.on(SOCKET_EVENTS.UPDATE_LOBBY, (p = {}) => { if (!state.match && !state.final) { state.players = p.players || []; if (p.selectedMode) { state.mode = p.selectedMode; state.modeLabel = titleCase(p.selectedMode); } render(); } });
+socket.on(SOCKET_EVENTS.GAME_STARTED, (p = {}) => { state.final = null; state.pvp = null; if (p.selectedMode) state.mode = p.selectedMode; state.modeLabel = titleCase(p.selectedMode || state.modeLabel); render(); });
 socket.on(SOCKET_EVENTS.GAME_STATE, (p = {}) => { state.players = p.players || []; state.match = p.match || null; state.pvp = p.pvp || null; state.boss = (p.enemies || []).find((e) => e.type === 'dragon') || null; render(); });
 socket.on(SOCKET_EVENTS.GAME_OVER, (p = {}) => { state.final = p; state.match = null; state.pvp = null; render(); });
 socket.on(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, (p = {}) => p.message && showAnnouncement(p.message, p.durationMs));
@@ -144,9 +143,11 @@ async function loadConfig() {
     const res = await fetch('/api/config');
     if (!res.ok) return;
     const config = await res.json();
+    state.mode = config.selectedMode || null;
+    state.maxPlayers = Number(config.maxPlayers) || state.maxPlayers;
     state.modeLabel = config.selectedModeLabel || titleCase(config.selectedMode);
     audio.setMode(config.selectedMode);
-    renderStatus();
+    render();
   } catch (_) {}
 }
 

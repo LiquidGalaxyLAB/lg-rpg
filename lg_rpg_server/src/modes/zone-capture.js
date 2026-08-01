@@ -1,10 +1,11 @@
-import { GAME_LOOP, PVP, PVP_TEAMS, SOCKET_EVENTS, SPAWN } from '../../game_constants.js';
+import { PVP, PVP_TEAMS, SOCKET_EVENTS, SPAWN } from '../../game_constants.js';
 import { io } from '../app.js';
 import { state } from '../state.js';
 import { findSpawnPoint } from '../lib/spawn.js';
 import { hitboxesWithinRange } from '../lib/hitbox.js';
 import { playerHitbox } from '../players.js';
 import { PlayerProjectiles } from '../lib/player-projectiles.js';
+import { captureScoringInterval } from '../lib/pvp-scoring.js';
 
 // Match phases: live -> finished. Teams spawn on opposite sides, so no lock/grace is needed.
 const PHASE = Object.freeze({ ACTIVE: 'active', ENDED: 'ended' });
@@ -128,7 +129,7 @@ export class ZoneCaptureMode {
   shotTargets(now) {
     const targets = [];
     for (const p of state.players.values()) {
-      if (p.dead) continue;
+      if (!p.socketId || p.dead) continue;
       if ((this.invulnUntil.get(p.playerId) || 0) > now) continue;
       targets.push({ id: p.playerId, team: p.team, hitbox: playerHitbox(p), player: p });
     }
@@ -190,7 +191,7 @@ export class ZoneCaptureMode {
   // Queues damage by player id for the reflect shield; flagged as bounced so it can't ping-pong.
   damagePlayerById(playerId, amount, attackerId) {
     const target = state.players.get(playerId);
-    if (!target || target.dead || this.phase !== PHASE.ACTIVE) return false;
+    if (!target?.socketId || target.dead || this.phase !== PHASE.ACTIVE) return false;
     this.pendingDamage.push({
       playerId,
       amount,
@@ -245,26 +246,31 @@ export class ZoneCaptureMode {
     }
   }
 
-  // The zone held by a single team earns that team the elapsed real time since the last update.
+  // Credits the full real interval to the team that controlled the zone during that interval, then records the controller for the next interval.
   updateZoneControl(now = Date.now()) {
     if (this.phase !== PHASE.ACTIVE) return;
-    // A long stall (GC, a blocked loop) must not hand over a huge lump of held time at once.
-    const deltaMs = Math.min(Math.max(0, now - this.lastZoneUpdateAt), GAME_LOOP.tickRateMs * 5);
-    this.lastZoneUpdateAt = now;
+    const { effectiveNow, elapsedMs } = captureScoringInterval(
+      now,
+      this.lastZoneUpdateAt,
+      this.roundEndsAt,
+    );
+    this.lastZoneUpdateAt = effectiveNow;
     for (const zone of this.zones) {
+      if (PVP_TEAMS.includes(zone.currentTeam)) {
+        this.zoneHeldMs[zone.currentTeam] += elapsedMs;
+      }
+
       let teamAInside = false;
       let teamBInside = false;
       for (const p of state.players.values()) {
-        if (p.dead || !this.insideZone(p, zone)) continue;
+        if (!p.socketId || p.dead || !this.insideZone(p, zone)) continue;
         if (p.team === 'teamA') teamAInside = true;
         else if (p.team === 'teamB') teamBInside = true;
       }
 
       if (teamAInside && !teamBInside) {
-        this.zoneHeldMs.teamA += deltaMs;
         zone.currentTeam = 'teamA';
       } else if (teamBInside && !teamAInside) {
-        this.zoneHeldMs.teamB += deltaMs;
         zone.currentTeam = 'teamB';
       } else {
         zone.currentTeam = 'neutral';
@@ -302,7 +308,7 @@ export class ZoneCaptureMode {
     let hits = 0;
 
     for (const target of state.players.values()) {
-      if (target === attacker || target.dead) continue;
+      if (!target.socketId || target === attacker || target.dead) continue;
       if (target.team === attacker.team) continue;
       if ((this.invulnUntil.get(target.playerId) || 0) > now) continue;
       if (!hitboxesWithinRange(hitbox, playerHitbox(target), range)) continue;
@@ -332,7 +338,7 @@ export class ZoneCaptureMode {
     // An empty team forfeits, but only after the grace window, so a brief drop-and-rejoin doesn't hand over the round.
     const counts = { teamA: 0, teamB: 0 };
     for (const p of state.players.values()) {
-      if (PVP_TEAMS.includes(p.team)) counts[p.team] += 1;
+      if (p.socketId && PVP_TEAMS.includes(p.team)) counts[p.team] += 1;
     }
     const forfeitWinner =
       counts.teamA === 0 && counts.teamB > 0 ? 'teamB'
