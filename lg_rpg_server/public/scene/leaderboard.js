@@ -1,5 +1,6 @@
 // In-map leaderboard panel, framed by the one rectangle in the map's `leaderboard` object layer; maps without it get no panel.
 import { GAME_VIEW } from '../shared_constants.js';
+import { rankPlayers } from './ranking.js';
 
 const REFRESH_MS = 250;
 const PAD = 8;
@@ -92,15 +93,11 @@ function clockInfo(scene) {
   };
 }
 
-// By team (leading first) in PvP, by kills otherwise.
+// By team (leading first) in PvP; tied team scores fall back to player stats.
 function ranked(scene, isPvp) {
   const list = [...(scene.serverFinal?.results || scene.serverPlayers)];
-  const byKillsThenName = (a, b) =>
-    Number(b.kills || 0) - Number(a.kills || 0) || String(a.name || '').localeCompare(String(b.name || ''));
-  if (!isPvp) return list.sort(byKillsThenName);
   const s = scene.serverFinal?.scores || scene.serverPvp?.scores || {};
-  const teamOrder = (s.teamA || 0) >= (s.teamB || 0) ? { teamA: 0, teamB: 1 } : { teamA: 1, teamB: 0 };
-  return list.sort((a, b) => (teamOrder[a.team] ?? 2) - (teamOrder[b.team] ?? 2) || byKillsThenName(a, b));
+  return rankPlayers(list, s, isPvp);
 }
 
 // Refreshes the panel text a few times a second.
