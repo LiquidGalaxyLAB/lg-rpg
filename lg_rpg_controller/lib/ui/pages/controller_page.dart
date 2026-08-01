@@ -29,6 +29,8 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
   int _armedCdMs = 0;
   final Map<String, DateTime> _readyAt = {};
   Timer? _ticker;
+  // Repeats the basic attack while ATTACK is held down.
+  Timer? _autoFire;
 
   @override
   void initState() {
@@ -51,6 +53,7 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _autoFire?.cancel();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -75,8 +78,14 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
     _readyAt[key] = DateTime.now().add(Duration(milliseconds: ms));
   }
 
+  // Buzz so a press that lands on a cooling button is distinguishable from a missed tap.
+  void _rejectPress() => HapticFeedback.heavyImpact();
+
   void _armSpecial(SpecialDef s) {
-    if (_onCooldown('sp:${s.id}')) return; // greyed while cooling down
+    if (_onCooldown('sp:${s.id}')) {
+      return _rejectPress(); // greyed while cooling down
+    }
+    HapticFeedback.selectionClick();
     setState(() {
       if (_armedId == s.id) {
         _armedId = null; // tap again to disarm
@@ -100,8 +109,23 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
     }
   }
 
+  // Holding ATTACK keeps swinging/firing at the character's own basic cooldown.
+  void _startAutoFire() {
+    HapticFeedback.selectionClick();
+    _attack();
+    _autoFire?.cancel();
+    final ms = _character.basicCooldownMs.clamp(250, 2000);
+    _autoFire = Timer.periodic(Duration(milliseconds: ms), (_) => _attack());
+  }
+
+  void _stopAutoFire() {
+    _autoFire?.cancel();
+    _autoFire = null;
+  }
+
   void _activateItem(LoadoutItemDef it) {
-    if (_onCooldown('it:${it.id}')) return;
+    if (_onCooldown('it:${it.id}')) return _rejectPress();
+    HapticFeedback.selectionClick();
     ref.read(activatePowerupUseCaseProvider).call(it.id);
     setState(() => _startCooldown('it:${it.id}', it.cooldownMs));
   }
@@ -124,6 +148,8 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
   Widget build(BuildContext context) {
     ref.listen(playerDiedStreamProvider, (_, next) {
       next.whenData((_) {
+        // Dying mid-hold never delivers onTapUp, so the repeat has to be cut here.
+        _stopAutoFire();
         if (ref.read(currentMatchModeProvider) != GameMode.pvp) return;
         if (mounted) setState(() => _isDowned = true);
       });
@@ -148,7 +174,8 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
                   children: [
                     // Left: movement joystick. FittedBox keeps it from overflowing on small screens.
                     Expanded(
-                      child: Center(
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Padding(
@@ -161,6 +188,8 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
                                 border: Border.all(color: p.border),
                               ),
                               child: Joystick(
+                                // Default is 100ms, too coarse to aim with.
+                                period: const Duration(milliseconds: 40),
                                 listener: (details) {
                                   ref
                                       .read(movePlayerUseCaseProvider)
@@ -172,21 +201,28 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
                         ),
                       ),
                     ),
-                    // Right: specials row, ATTACK, loadout row.
+                    // Right: abilities block beside ATTACK, anchored where the thumb rests.
                     Expanded(
-                      child: Center(
+                      child: Align(
+                        alignment: Alignment.bottomRight,
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Column(
+                            // Abilities sit beside ATTACK, not above and below it: landscape has width to spare and almost no height.
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _buildSpecialsRow(),
-                                const SizedBox(height: 14),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildSpecialsRow(),
+                                    const SizedBox(height: 8),
+                                    _buildLoadoutRow(),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
                                 _buildAttackButton(),
-                                const SizedBox(height: 14),
-                                _buildLoadoutRow(),
                               ],
                             ),
                           ),
@@ -266,16 +302,13 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final s in _character.specials)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _AbilityButton(
-              emoji: s.icon,
-              sprite: s.sprite,
-              armed: _armedId == s.id,
-              cooldownFraction: _cooldownFraction('sp:${s.id}', s.cooldownMs),
-              onTap: () => _armSpecial(s),
-            ),
+        for (final s in _character.specials.where((s) => !s.stub))
+          _AbilityButton(
+            emoji: s.icon,
+            sprite: s.sprite,
+            armed: _armedId == s.id,
+            cooldownFraction: _cooldownFraction('sp:${s.id}', s.cooldownMs),
+            onTap: () => _armSpecial(s),
           ),
       ],
     );
@@ -285,11 +318,7 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (int i = 0; i < LoadoutConfig.slots; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _slotAt(i),
-          ),
+        for (int i = 0; i < LoadoutConfig.slots; i++) _slotAt(i),
       ],
     );
   }
@@ -310,7 +339,9 @@ class _ControllerPageState extends ConsumerState<ControllerPage> {
     final p = context.palette;
     final armed = _armedSpecial;
     return GestureDetector(
-      onTap: _attack,
+      onTapDown: (_) => _startAutoFire(),
+      onTapUp: (_) => _stopAutoFire(),
+      onTapCancel: _stopAutoFire,
       child: Container(
         width: 116,
         height: 116,
@@ -417,24 +448,30 @@ class _AbilityButton extends StatelessWidget {
         onTap = null,
         empty = true;
 
-  static const double _size = 54;
+  static const double _size = 64;
+
+  // Invisible margin that belongs to the button, lifting the touch target to 74dp.
+  static const double _touchPad = 5;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     if (empty) {
-      return Container(
-        width: _size,
-        height: _size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: p.border.withValues(alpha: 0.6)),
-          color: p.surface.withValues(alpha: 0.3),
-        ),
-        child: Icon(
-          Icons.add_rounded,
-          size: 20,
-          color: p.onSurfaceMuted.withValues(alpha: 0.4),
+      return Padding(
+        padding: const EdgeInsets.all(_touchPad),
+        child: Container(
+          width: _size,
+          height: _size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: p.border.withValues(alpha: 0.6)),
+            color: p.surface.withValues(alpha: 0.3),
+          ),
+          child: Icon(
+            Icons.add_rounded,
+            size: 20,
+            color: p.onSurfaceMuted.withValues(alpha: 0.4),
+          ),
         ),
       );
     }
@@ -455,49 +492,53 @@ class _AbilityButton extends StatelessWidget {
         : Text(emoji, style: const TextStyle(fontSize: 22));
 
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: _size,
-        height: _size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: armed ? p.surfaceHigh : p.surface,
-          border: Border.all(color: borderColor, width: armed ? 2 : 1),
-          boxShadow: armed
-              ? [
-                  BoxShadow(
-                    color: p.primary.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                  ),
-                ]
-              : null,
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            face,
-            if (cooling)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: ColoredBox(
-                    color: Colors.black.withValues(alpha: 0.30),
-                    child: Center(
-                      child: SizedBox(
-                        width: 34,
-                        height: 34,
-                        child: CircularProgressIndicator(
-                          value: cooldownFraction,
-                          strokeWidth: 3,
-                          color: Colors.white70,
-                          backgroundColor: Colors.white24,
+      behavior: HitTestBehavior.opaque,
+      onTapDown: onTap == null ? null : (_) => onTap!(),
+      child: Padding(
+        padding: const EdgeInsets.all(_touchPad),
+        child: Container(
+          width: _size,
+          height: _size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: armed ? p.surfaceHigh : p.surface,
+            border: Border.all(color: borderColor, width: armed ? 2 : 1),
+            boxShadow: armed
+                ? [
+                    BoxShadow(
+                      color: p.primary.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              face,
+              if (cooling)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: 0.30),
+                      child: Center(
+                        child: SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                            value: cooldownFraction,
+                            strokeWidth: 3,
+                            color: Colors.white70,
+                            backgroundColor: Colors.white24,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
