@@ -30,6 +30,40 @@ export function captureTeamScores() {
   }
 }
 
+// The same rule checkMatchEnd uses, so a round that ends outside it still names the team the score shows.
+function winnerFromScores(scores = {}) {
+  const a = Number(scores.teamA || 0);
+  const b = Number(scores.teamB || 0);
+  return a > b ? 'teamA' : b > a ? 'teamB' : null;
+}
+
+export function connectedPlayerCount() {
+  let count = 0;
+  for (const player of state.players.values()) {
+    if (player.socketId) count += 1;
+  }
+  return count;
+}
+
+// Keeps a PvP player's match state during the reconnect/forfeit grace window. The simulation ignores socket-less players, so the retained entry is not an active avatar until the same player id reconnects.
+export function markPlayerDisconnected(playerId, socketId) {
+  const player = state.players.get(playerId);
+  if (!player || player.socketId !== socketId) return null;
+
+  state.socketPlayers.delete(socketId);
+  player.socketId = null;
+  player.velocityX = 0;
+  player.velocityY = 0;
+  player.action = null;
+  player.actionKind = null;
+  player.actionExpiresAt = 0;
+
+  if (state.phase === GAME_PHASES.PLAYING && connectedPlayerCount() === 0) {
+    scheduleEmptyGrace();
+  }
+  return player;
+}
+
 // Stops active game elements and sends results; `result` is null for co-op, set for PvP team modes.
 export function endMatch(reason = 'all-dead', result = null) {
   const outcome = reason === 'boss-defeated' ? 'win' : 'loss';
@@ -39,7 +73,7 @@ export function endMatch(reason = 'all-dead', result = null) {
   captureTeamScores();
   const teamResult = result
     || (state.selectedMode === GAME_MODES.PVP && state.lastTeamScores
-      ? { winner: null, scores: state.lastTeamScores }
+      ? { winner: winnerFromScores(state.lastTeamScores), scores: state.lastTeamScores }
       : null);
   if (state.activeMode) {
     state.activeMode.stop();
@@ -83,6 +117,26 @@ export function endMatch(reason = 'all-dead', result = null) {
     ? { reason, winner: teamResult.winner, scores: teamResult.scores, survivedMs, results }
     : { reason, outcome, survivedMs, results };
   io.emit(SOCKET_EVENTS.GAME_OVER, payload);
+
+  // Players retained only for PvP reconnection must not become permanent lobby ghosts after the round ends.
+  let removedDisconnected = false;
+  for (const [playerId, player] of state.players) {
+    if (player.socketId) continue;
+    state.players.delete(playerId);
+    removedDisconnected = true;
+  }
+  if (removedDisconnected) {
+    const players = Array.from(state.players.values());
+    if (players.length > 0 && !players.some((player) => player.isHost)) {
+      players[0].isHost = true;
+    }
+    io.emit(SOCKET_EVENTS.UPDATE_LOBBY, {
+      players,
+      hostId: players.find((player) => player.isHost)?.playerId ?? '',
+      selectedMode: state.selectedMode,
+    });
+  }
+
   console.log(`[game] match over (${reason}). ${teamResult ? `winner=${teamResult.winner ?? 'draw'}` : outcome}, survived ${survivedMs}ms`);
 }
 
@@ -96,7 +150,7 @@ export function scheduleEmptyGrace() {
   console.log(`[game] all players gone; ending in ${MATCH.emptyGraceMs}ms unless someone returns.`);
   state.emptyGraceTimer = setTimeout(() => {
     state.emptyGraceTimer = null;
-    if (state.phase === GAME_PHASES.PLAYING && state.players.size === 0) endMatch('all-left');
+    if (state.phase === GAME_PHASES.PLAYING && connectedPlayerCount() === 0) endMatch('all-left');
   }, MATCH.emptyGraceMs);
 }
 
@@ -126,7 +180,7 @@ export function removePlayer(playerId, socketId) {
     if (state.cheerleader) { state.cheerleader.stop(); state.cheerleader = null; }
   }
 
-  if (state.players.size === 0 && state.phase === GAME_PHASES.PLAYING) {
+  if (state.phase === GAME_PHASES.PLAYING && connectedPlayerCount() === 0) {
     scheduleEmptyGrace();
   }
   return removed;
