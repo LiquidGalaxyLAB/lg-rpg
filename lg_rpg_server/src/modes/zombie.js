@@ -10,12 +10,11 @@ import {
 import { findSpawnPoint } from '../lib/spawn.js';
 import { canStandAt, moveWithCollision } from '../lib/collision.js';
 import { createPathfinder, distance, distanceSq } from '../lib/pathfinding.js';
+import { hitboxesWithinRange } from '../lib/hitbox.js';
 import { PlayerProjectiles } from '../lib/player-projectiles.js';
 import { state } from '../state.js';
 import { emitGameEvent } from '../cheerleader-bridge.js';
 
-// Default enemy stats merged with any type-specific overrides.
-// Types that declare their own aggroRange keep it; the rest use the map-sized default.
 function resolveStats(pick, defaultAggroRange) {
   return {
     speed: pick.speed ?? ENEMY_MOVEMENT.speed,
@@ -65,16 +64,6 @@ function enemyCollisionBodyFromStats(stats) {
     halfWidth: Math.max(6, Math.min(14, stats.hitboxHalfWidth)),
     height: 8,
   };
-}
-
-function distanceSqBetweenHitboxes(a, b) {
-  const dx = a.left > b.right ? a.left - b.right : b.left > a.right ? b.left - a.right : 0;
-  const dy = a.top > b.bottom ? a.top - b.bottom : b.top > a.bottom ? b.top - a.bottom : 0;
-  return dx * dx + dy * dy;
-}
-
-function hitboxesWithinRange(a, b, range) {
-  return distanceSqBetweenHitboxes(a, b) <= range * range;
 }
 
 // Effective move speed, cut while a Frost Nova slow is running.

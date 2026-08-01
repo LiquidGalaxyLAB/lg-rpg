@@ -1,5 +1,5 @@
 // Forces a number to stay between a low and high limit (too small -> min, too big -> max).
-export function clamp(value, min, max) {
+function clamp(value, min, max) {
   return value < min ? min : value > max ? max : value;
 }
 
@@ -18,12 +18,12 @@ export function distanceSq(a, b) {
 }
 
 // Gives the arrow that points from point a to point b.
-export function subtract(b, a) {
+function subtract(b, a) {
   return { x: b.x - a.x, y: b.y - a.y };
 }
 
 // Shrinks an arrow to length 1 so it only carries direction, not speed.
-export function normalize(v) {
+function normalize(v) {
   const len = Math.sqrt(v.x * v.x + v.y * v.y);
   if (len === 0) return { x: 0, y: 0 };
   return { x: v.x / len, y: v.y / len };

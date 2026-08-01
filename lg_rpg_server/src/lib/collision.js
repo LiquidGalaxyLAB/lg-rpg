@@ -1,7 +1,7 @@
 // Tile-based collision detection and axis-separated movement resolution.
 
 // Default foot hitbox used for players and enemies when no override is provided.
-export const DEFAULT_FEET_BODY = Object.freeze({
+const DEFAULT_FEET_BODY = Object.freeze({
   halfWidth: 6,
   height: 8,
 });
@@ -22,7 +22,7 @@ export function createCollisionGrid({ width, height, tileWidth, tileHeight, bloc
 }
 
 // Returns the axis-aligned bounding rect for an entity's feet at (x, y).
-export function feetRectAt(x, y, body = DEFAULT_FEET_BODY) {
+function feetRectAt(x, y, body = DEFAULT_FEET_BODY) {
   return {
     left: x - body.halfWidth,
     top: y - body.height,
@@ -32,14 +32,14 @@ export function feetRectAt(x, y, body = DEFAULT_FEET_BODY) {
 }
 
 // Returns true if the tile at (tileX, tileY) is blocked or out of bounds.
-export function isTileBlocked(collision, tileX, tileY) {
+function isTileBlocked(collision, tileX, tileY) {
   if (!collision) return false;
   if (tileX < 0 || tileY < 0 || tileX >= collision.width || tileY >= collision.height) return true;
   return collision.blocked[tileY * collision.width + tileX] === 1;
 }
 
 // Returns true if any tile overlapping rect is blocked.
-export function rectCollides(collision, rect) {
+function rectCollides(collision, rect) {
   if (!collision) return false;
 
   const left = Math.floor(rect.left / collision.tileWidth);
