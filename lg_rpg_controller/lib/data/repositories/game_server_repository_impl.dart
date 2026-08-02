@@ -170,6 +170,7 @@ class GameServerRepositoryImpl extends GameServerRepository {
       _gameOverController.add(GameOverEntity(
         outcome: outcome,
         survivedMs: (payload['survivedMs'] as num?)?.round() ?? 0,
+        reason: payload['reason']?.toString(),
       ));
     });
     _socketService.on(SocketEvent.youDied, (data) {
