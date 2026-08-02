@@ -7,6 +7,13 @@ const HIT_PAD = 6;
 
 const ASSIST_COS = Math.cos((PLAYER_RANGED.aimAssist.maxAngleDeg * Math.PI) / 180);
 
+function muzzle(owner, dirX) {
+  return {
+    x: owner.x + dirX * PLAYER_RANGED.muzzle.forward,
+    y: owner.y - PLAYER_RANGED.muzzle.height,
+  };
+}
+
 export class PlayerProjectiles {
   constructor(bounds) {
     this.bounds = bounds;
@@ -23,14 +30,15 @@ export class PlayerProjectiles {
   spawn(owner, cfg, dirX, dirY, targets = null) {
     const id = `s${this.nextId++}`;
     if (targets) ({ dirX, dirY } = this.assistAim(owner, cfg, dirX, dirY, targets));
+    const origin = muzzle(owner, dirX);
     this.shots.set(id, {
       id,
       ownerId: owner.playerId,
       ownerTeam: owner.team ?? null,
       sprite: cfg.sprite,
       scale: cfg.scale,
-      x: owner.x + dirX * 16,
-      y: owner.y - 24 + dirY * 16,
+      x: origin.x,
+      y: origin.y,
       vx: dirX * cfg.speed,
       vy: dirY * cfg.speed,
       angle: Math.atan2(dirY, dirX),
@@ -84,8 +92,7 @@ export class PlayerProjectiles {
 
 
   assistAim(owner, cfg, dirX, dirY, targets) {
-    const originX = owner.x + dirX * 16;
-    const originY = owner.y - 24 + dirY * 16;
+    const { x: originX, y: originY } = muzzle(owner, dirX);
     const rangeSq = cfg.maxRange * cfg.maxRange;
     let bestCos = ASSIST_COS;
     let best = null;

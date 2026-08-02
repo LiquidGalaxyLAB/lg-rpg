@@ -82,6 +82,9 @@ export const PLAYER_RANGED = Object.freeze({
   // Input-to-release delay, timed to the huntress attack_1 draw frames (6 frames @ 12fps).
   windupMs: 330,
 
+  // Bow height above the feet and how far ahead of the shooter a shot appears; height is fixed so a steep aim still leaves from the hands.
+  muzzle: Object.freeze({ height: 16, forward: 16 }),
+
   // Wide enough that pointing roughly at a target connects; the shot still goes where you aim.
   aimAssist: Object.freeze({ maxAngleDeg: 50 }),
   attacks: Object.freeze({
