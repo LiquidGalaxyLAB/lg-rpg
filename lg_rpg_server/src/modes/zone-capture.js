@@ -327,6 +327,10 @@ export class ZoneCaptureMode {
     return { hit: hits > 0, killed: false, hits, kills: 0 };
   }
 
+  announce(message, durationMs) {
+    io.emit(SOCKET_EVENTS.MATCH_ANNOUNCEMENT, { message, durationMs });
+  }
+
   // Returns the round result when the timer expires or a whole team has left.
   checkMatchEnd() {
     if (this.phase === PHASE.ENDED) return null;
@@ -345,9 +349,17 @@ export class ZoneCaptureMode {
         : counts.teamB === 0 && counts.teamA > 0 ? 'teamA'
           : null;
     if (!forfeitWinner) {
-      this.forfeitSince = 0;
+      if (this.forfeitSince) {
+        this.forfeitSince = 0;
+        this.announce('Both teams are back — the round continues!', 3000);
+      }
     } else {
-      if (!this.forfeitSince) this.forfeitSince = now;
+      if (!this.forfeitSince) {
+        this.forfeitSince = now;
+        const leaver = forfeitWinner === 'teamA' ? 'Red' : 'Blue';
+        const seconds = Math.round(PVP.forfeitGraceMs / 1000);
+        this.announce(`${leaver} team disconnected — forfeit in ${seconds}s`, PVP.forfeitGraceMs);
+      }
       if (now - this.forfeitSince >= PVP.forfeitGraceMs) {
         this.phase = PHASE.ENDED;
         for (const zone of this.zones) zone.currentTeam = 'neutral';

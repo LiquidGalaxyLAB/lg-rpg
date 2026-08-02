@@ -66,7 +66,8 @@ function clockInfo(scene) {
     if ('winner' in final) {
       const s = final.scores || {};
       const label = final.winner ? (final.winner === 'teamA' ? 'BLUE WINS' : 'RED WINS') : 'DRAW';
-      return { label, sub: `Blue ${s.teamA ?? 0} - ${s.teamB ?? 0} Red` };
+      const score = `Blue ${s.teamA ?? 0} - ${s.teamB ?? 0} Red`;
+      return { label, sub: final.reason === 'pvp-forfeit' ? `Forfeit - ${score}` : score };
     }
     return {
       label: final.outcome === 'win' ? 'VICTORY' : 'GAME OVER',

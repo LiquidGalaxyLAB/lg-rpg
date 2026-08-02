@@ -23,7 +23,13 @@ import { state } from '../state.js';
 import { getSelectedMapConfig } from '../maps.js';
 import { createMode } from '../game-modes.js';
 import { broadcastLobby, playerHitbox, spawnPlayerPosition } from '../players.js';
-import { cancelEmptyGrace, endMatch, removePlayer, startMatchState } from '../match.js';
+import {
+  cancelEmptyGrace,
+  endMatch,
+  markPlayerDisconnected,
+  removePlayer,
+  startMatchState,
+} from '../match.js';
 import {
   drainGameEvents,
   emitCheerleaderAudio,
@@ -75,6 +81,7 @@ export function registerSocketHandlers() {
 
       // Keeps existing stats on reconnect.
       const player = {
+        ...existing,
         playerId,
         name: String(payload.name || existing?.name || `Player ${state.players.size + 1}`),
         isReady: existing?.isReady ?? false,
@@ -109,6 +116,7 @@ export function registerSocketHandlers() {
 
       state.players.set(playerId, player);
       state.socketPlayers.set(socket.id, playerId);
+      if (state.phase === GAME_PHASES.PLAYING) cancelEmptyGrace();
 
       console.log(`[lobby] player joined: ${player.name} (${player.playerId}). total=${state.players.size}`);
       broadcastLobby();
@@ -478,7 +486,11 @@ export function registerSocketHandlers() {
         return;
       }
 
-      removePlayer(playerId, socket.id);
+      if (state.phase === GAME_PHASES.PLAYING && state.selectedMode === GAME_MODES.PVP) {
+        markPlayerDisconnected(playerId, socket.id);
+      } else {
+        removePlayer(playerId, socket.id);
+      }
       console.log(`[lobby] player disconnected: ${playerId}. total=${state.players.size}`);
       broadcastLobby();
     });

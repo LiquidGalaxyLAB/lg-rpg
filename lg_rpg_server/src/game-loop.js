@@ -36,7 +36,7 @@ export function startGameLoop() {
           };
       const moveNow = Date.now();
       for (const player of state.players.values()) {
-        if (player.dead) continue;
+        if (!player.socketId || player.dead) continue;
         // Knockback stacks on input (controls stay live) and fades linearly to zero.
         const knocked = player.knockbackUntil && moveNow < player.knockbackUntil;
         const fade = knocked ? (player.knockbackUntil - moveNow) / PLAYER_DEFAULTS.knockbackMs : 0;
@@ -54,14 +54,14 @@ export function startGameLoop() {
 
     if (state.activeMode) {
       const alive = Array.from(state.players.values())
-        .filter((p) => !p.dead)
+        .filter((p) => p.socketId && !p.dead)
         .map((p) => ({ id: p.playerId, x: p.x, y: p.y, hitbox: playerHitbox(p) }));
       const { playerDamage } = state.activeMode.tick(alive);
 
       const now = Date.now();
       for (const hit of playerDamage || []) {
         const player = state.players.get(hit.playerId);
-        if (!player || player.dead) continue;
+        if (!player?.socketId || player.dead) continue;
         // Bounces damage back amplified (bounced hits don't re-reflect), but the wearer still takes a reduced share — it is not a second shield.
         let amount = hit.amount;
         if ((player.reflectUntil || 0) > now) {
@@ -126,7 +126,7 @@ export function startGameLoop() {
 
       if (state.heartField) {
         for (const player of state.players.values()) {
-          if (player.dead) continue;
+          if (!player.socketId || player.dead) continue;
           const heal = state.heartField.tryConsume(playerHitbox(player));
           if (heal > 0) {
             player.health = Math.min(player.maxHealth, player.health + heal);
