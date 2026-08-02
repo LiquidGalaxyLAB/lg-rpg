@@ -35,8 +35,11 @@ function renderResult() {
     // PvP result carries a winning team; co-op result carries an outcome.
     if ('winner' in state.final) {
       const w = state.final.winner, s = state.final.scores || {};
+      const forfeit = state.final.reason === 'pvp-forfeit';
       panel.classList.add(w ? 'win' : 'draw');
-      $('clockLabel').textContent = w ? `${teamName(w)} Team Wins` : 'Draw';
+      $('clockLabel').textContent = w
+        ? (forfeit ? `${teamName(w)} Wins by Forfeit` : `${teamName(w)} Team Wins`)
+        : 'Draw';
       $('clockValue').textContent = w ? 'VICTORY' : 'DRAW';
       $('resultSub').textContent = `Blue ${s.teamA ?? 0} — ${s.teamB ?? 0} Red`;
       return;
