@@ -2,16 +2,13 @@
 import { GAME_VIEW, GAME_PHASES, SOCKET_EVENTS } from './shared_constants.js';
 import { drawPvp, drawHearts, showWaiting, hideWaiting } from './scene/overlays.js';
 import { createLeaderboard, updateLeaderboard, setLeaderboardAnnouncement } from './scene/leaderboard.js';
+import { createDecals, updateDecals } from './scene/decals.js';
 import { initGameAudio } from './game_audio.js';
 import { createWeather, updateWeather } from './scene/weather.js';
 import { deathBurst, spillShards, healPopup, sparkleBurst, updateShieldFx, updateAuraFx, playAttackFx } from './scene/effects.js';
 
-// Map tile layers and decals render below every entity; the band is deep enough for any layer count.
+// Map tile layers render below every entity; the band is deep enough for any layer count.
 const MAP_DEPTH_BASE = -1000;
-
-// Keep map branding smaller than its Tiled box; GSoC gets a slight boost to match LG's visual footprint.
-const DECAL_SCALE_FACTOR = 0.8;
-const GSOC_SCALE_FACTOR = 0.88;
 
 // Visual-only boost over each manifest's render scale so characters read on the LG wall; server hitboxes are untouched, and projectiles are server-scaled instead.
 const ENTITY_SCALE_BOOST = 1.3;
@@ -91,7 +88,7 @@ async function startGame() {
       preload() {
         this.load.tilemapTiledJSON(mapConfig.key, `assets/${mapConfig.path}`);
         (mapConfig.tilesets || []).forEach(t => this.load.image(t.key, `assets/${t.path}`));
-        (mapConfig.decals || []).forEach(d => this.load.image(d.key, `assets/${d.path}`));
+        // Decals are not loaded here: createDecals renders them as DOM images straight from their path.
         this.load.spritesheet('heart', 'assets/items/heart.png', { frameWidth: 16, frameHeight: 16 });
         this.load.spritesheet('fx:sparkle', 'assets/fx/boost_sparkles.png', { frameWidth: 53, frameHeight: 35 });
         this.load.spritesheet('fx:shield', 'assets/fx/shield_bubble_blue.png', { frameWidth: 24, frameHeight: 26 });
@@ -154,21 +151,8 @@ async function startGame() {
             this.mapLayers.push(layer);
           }
         });
-        // Static branding fitted into a Tiled object rectangle: the decal's `name` is the object layer, its first rectangle is the box, and the image is contained (never stretched) and centred inside.
-        (mapConfig.decals || []).forEach(d => {
-          const box = map.getObjectLayer(d.name)?.objects?.[0];
-          if (!box) { console.warn(`Decal box not found: ${d.name}`); return; }
-          const img = this.add.image(0, 0, d.key).setOrigin(0.5);
-          const filter = d.name === 'gsoc'
-            ? Phaser.Textures.FilterMode.NEAREST
-            : Phaser.Textures.FilterMode.LINEAR;
-          img.texture.setFilter(filter);
-          const decalScaleFactor = d.name === 'gsoc' ? GSOC_SCALE_FACTOR : DECAL_SCALE_FACTOR;
-          const scale = Math.min(box.width / img.width, box.height / img.height) * decalScaleFactor;
-          img.setDisplaySize(img.width * scale, img.height * scale);
-          img.setPosition(box.x + box.width / 2 - this.cameraOffset, box.y + box.height / 2);
-          img.setDepth(MAP_DEPTH_BASE + map.layers.length);
-        });
+        // Static branding, still placed from its Tiled object rectangle but rendered above the canvas at full display resolution rather than inside the 360px-wide render target.
+        createDecals(this, map, mapConfig);
         // Framed by the map's `leaderboard` object rectangle; only drawn by screens whose slice overlaps it.
         createLeaderboard(this, map, configData);
         // Above the ground but below sprites (which use depth = world y).
@@ -306,6 +290,7 @@ async function startGame() {
         drawHearts(this);
         drawPvp(this);
         updateLeaderboard(this);
+        updateDecals(this);
         if (this.rainDrops) updateWeather(this, delta / 1000);
       }
 
