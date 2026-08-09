@@ -53,8 +53,13 @@ class _MatchResultPageState extends ConsumerState<MatchResultPage> {
         : won
             ? (isPvp ? 'Victory!' : 'You Survived!')
             : (isPvp ? 'Defeat' : 'You Died');
+    final forfeit = result?.reason == 'pvp-forfeit';
     final subtitle = isPvp
-        ? 'Round Over'
+        ? (forfeit
+            ? (won
+                ? 'Opponents left — win by forfeit'
+                : 'Your team left — forfeit')
+            : 'Round Over')
         : 'Survived ${_formatClock(result?.survivedMs ?? 0)}';
     final p = context.palette;
     final color = draw
