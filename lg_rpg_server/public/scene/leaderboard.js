@@ -1,6 +1,7 @@
-// In-map leaderboard panel, framed by the one rectangle in the map's `leaderboard` object layer; maps without it get no panel.
+// In-map leaderboard panel, framed by the one rectangle in the map's `leaderboard` object layer; maps without it get no panel. The panel background stays in the canvas — a solid rounded rect has no resolution to lose — while the text sits in the DOM overlay, because in-canvas glyphs are capped at the 360px-wide render target.
 import { GAME_VIEW } from '../shared_constants.js';
 import { rankPlayers } from './ranking.js';
+import { createOverlay } from './dom_overlay.js';
 
 const REFRESH_MS = 250;
 const PAD = 8;
@@ -36,11 +37,49 @@ export function createLeaderboard(scene, map, configData) {
   const rowH = (h - rowsTop - PAD) / slots;
   // Row font is capped by both the slot height and the ROW_CHARS line width.
   const rowSize = Math.max(9, Math.floor(Math.min(rowH * 0.5, (w - 2 * PAD) / (ROW_CHARS * 0.62))));
+  // Phaser stacked rows as the font's ~1.2 line box plus its lineSpacing; CSS folds both into line-height.
+  const lineHeight = Math.max(rowH, rowSize * 1.2 + 2);
+  // CSS centres each line inside its line box where Phaser stacked from the top, so the first row is pulled up by the half-leading to keep it starting at rowsTop.
+  const halfLeading = (lineHeight - rowSize * 1.2) / 2;
 
-  // 3x resolution so the display upscale keeps text sharp.
-  const mkText = (tx, ty, size, color, style = {}) => scene.add.text(x + tx, box.y + ty, '', {
-    fontFamily: 'monospace', fontSize: `${size}px`, color, ...style,
-  }).setDepth(9501).setResolution(3);
+  // Sized and placed from the same box the panel uses, so the Tiled layout still drives everything.
+  const overlay = createOverlay(scene);
+  const panelEl = overlay.add(document.createElement('div'));
+  Object.assign(panelEl.style, {
+    position: 'absolute', fontFamily: 'monospace', lineHeight: '1',
+    // Rows are aligned with padEnd/padStart, so runs of spaces and the newlines have to survive.
+    whiteSpace: 'pre',
+  });
+
+  const texts = [];
+  const mkText = (tx, ty, size, color, align = 'left') => {
+    const el = document.createElement('div');
+    Object.assign(el.style, { position: 'absolute', color });
+    panelEl.appendChild(el);
+    texts.push({ el, tx, ty, size, align });
+    return el;
+  };
+
+  const title = mkText(PAD, PAD, titleSize, '#ddde68');
+  title.textContent = 'LEADERBOARD';
+  const clock = mkText(w - PAD, PAD, titleSize, '#ffffff', 'right');
+  const sub = mkText(PAD, PAD + titleSize + 4, subSize, '#a5b2eb');
+  const rows = mkText(PAD, rowsTop - halfLeading, rowSize, '#eaecf5');
+
+  overlay.onLayout(({ sx, sy, left, top }) => {
+    Object.assign(panelEl.style, {
+      left: `${left + x * sx}px`, top: `${top + box.y * sy}px`,
+      width: `${w * sx}px`, height: `${h * sy}px`,
+    });
+    for (const t of texts) {
+      t.el.style.top = `${t.ty * sy}px`;
+      t.el.style.fontSize = `${t.size * sy}px`;
+      // The clock hangs off the panel's right edge, as its origin(1, 0) used to.
+      if (t.align === 'right') t.el.style.right = `${(w - t.tx) * sx}px`;
+      else t.el.style.left = `${t.tx * sx}px`;
+    }
+    rows.style.lineHeight = `${lineHeight * sy}px`;
+  });
 
   scene.leaderboard = {
     lastRefresh: -Infinity,
@@ -49,13 +88,9 @@ export function createLeaderboard(scene, map, configData) {
     announcement: null,
     announcementUntil: 0,
     panel: g,
+    panelEl,
     visible: true,
-    title: mkText(PAD, PAD, titleSize, '#ddde68').setText('LEADERBOARD'),
-    clock: mkText(w - PAD, PAD, titleSize, '#ffffff').setOrigin(1, 0),
-    sub: mkText(PAD, PAD + titleSize + 4, subSize, '#a5b2eb'),
-    rows: mkText(PAD, rowsTop, rowSize, '#eaecf5', {
-      lineSpacing: Math.max(2, rowH - rowSize * 1.2),
-    }),
+    title, clock, sub, rows,
   };
 }
 
@@ -110,7 +145,9 @@ export function updateLeaderboard(scene) {
   const wantVisible = !scene.waitingObjects?.length;
   if (wantVisible !== lb.visible) {
     lb.visible = wantVisible;
-    for (const obj of [lb.panel, lb.title, lb.clock, lb.sub, lb.rows]) obj.setVisible(wantVisible);
+    lb.panel.setVisible(wantVisible);
+    // The DOM text layer sits above the canvas, so it has to be hidden outright rather than relying on the waiting overlay to cover it.
+    lb.panelEl.style.display = wantVisible ? '' : 'none';
   }
   if (!wantVisible) return;
 
@@ -119,16 +156,16 @@ export function updateLeaderboard(scene) {
 
   const isPvp = lb.isPvp || !!scene.serverPvp || (!!scene.serverFinal && 'winner' in scene.serverFinal);
   const { label, sub } = clockInfo(scene);
-  lb.clock.setText(label);
+  lb.clock.textContent = label;
   if (lb.announcement && scene.time.now >= lb.announcementUntil) lb.announcement = null;
-  lb.sub.setText(lb.announcement || sub);
+  lb.sub.textContent = lb.announcement || sub;
 
   const players = ranked(scene, isPvp);
   // Filled and empty seats build every column the same way, so an unclaimed slot can't shift left by the width of the PvP team tag.
   const row = (rank, team, name, state, kills) =>
     `${rank} ${team}${name.padEnd(NAME_CHARS)} ${state.padStart(4)} ${kills.padStart(3)}`;
 
-  lb.rows.setText(Array.from({ length: lb.slots }, (_, i) => {
+  lb.rows.textContent = Array.from({ length: lb.slots }, (_, i) => {
     const p = players[i];
     const blankTeam = isPvp ? '  ' : '';
     if (!p) return `${row(i + 1, blankTeam, '—', '—', '—')} `;
@@ -142,7 +179,7 @@ export function updateLeaderboard(scene) {
     // Clamped so a runaway count can't widen the row past what rowSize was measured against.
     const kills = String(Math.min(999, Number(p.kills) || 0));
     return `${row(i + 1, team, name, state, kills)}k`;
-  }).join('\n'));
+  }).join('\n');
 }
 
 // Short-lived server announcements in the sub-line; the map screens are the rig's only display, so these can't live on the right screen alone.

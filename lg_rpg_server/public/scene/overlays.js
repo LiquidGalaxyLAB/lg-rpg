@@ -57,51 +57,14 @@ export function drawHearts(scene) {
   }
 }
 
-const SCALE_RESIZE = 'resize';
-
-function viewportReport(scene) {
-  const screenNumber = parseInt(new URLSearchParams(location.search).get('screen')) || 1;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const display = scene.scale.displaySize;
-  const cw = Math.round(display.width), ch = Math.round(display.height);
-  const sideBar = Math.round((vw - cw) / 2), topBar = Math.round((vh - ch) / 2);
-  const fills = sideBar <= 1 && topBar <= 1;
-  const verdict = fills ? 'FILLS PANEL'
-    : sideBar >= topBar ? `BARS ${sideBar}px EACH SIDE` : `BARS ${topBar}px TOP AND BOTTOM`;
-  return {
-    fills,
-    text: [
-      `screen ${screenNumber}`,
-      `panel     ${window.screen.width} x ${window.screen.height}`,
-      `viewport  ${vw} x ${vh}`,
-      `canvas    ${cw} x ${ch}`,
-      // Page zoom and OS display scaling both land here; the launcher forces 1.
-      `dpr       ${window.devicePixelRatio}`,
-      verdict,
-    ].join('\n'),
-  };
-}
-
 export function showWaiting(scene) {
   if (scene.waitingObjects?.length) return;
   const w = GAME_VIEW.screenWidth, h = GAME_VIEW.screenHeight;
-  // TEMPORARY: the diagnostic block, refreshed on resize so it stays true if the window changes.
-  const report = scene.add.text(w / 2, h / 2 + 12, '', {
-    fontFamily: 'monospace', fontSize: '10px', color: '#ffca28', align: 'center'
-  }).setOrigin(0.5, 0).setDepth(9001).setResolution(3);
-  scene.waitingReport = () => {
-    const { fills, text } = viewportReport(scene);
-    report.setText(text).setColor(fills ? '#5fd18c' : '#ffca28');
-  };
-  scene.waitingReport();
-  scene.scale.on(SCALE_RESIZE, scene.waitingReport);
-
   scene.waitingObjects = [
     scene.add.rectangle(w / 2, h / 2, w, h, 0x1a1a1a, 1).setDepth(9000),
     scene.add.text(w / 2, h / 2, 'Waiting for the match to start…', {
       fontFamily: 'monospace', fontSize: '15px', color: '#ffffff', align: 'center', wordWrap: { width: w * 0.8 }
-    }).setOrigin(0.5, 1).setDepth(9001).setResolution(3),
-    report,
+    }).setOrigin(0.5).setDepth(9001).setResolution(3),
   ];
   scene.waitingObjects.forEach(obj => obj.setAlpha(0));
   scene.tweens.add({ targets: scene.waitingObjects, alpha: 1, duration: 500, ease: 'Sine.easeOut' });
@@ -111,11 +74,6 @@ export function hideWaiting(scene) {
   const objects = scene.waitingObjects || [];
   if (!objects.length) return;
   scene.waitingObjects = [];
-  // TEMPORARY: drop the diagnostic's resize listener with the text it updates.
-  if (scene.waitingReport) {
-    scene.scale.off(SCALE_RESIZE, scene.waitingReport);
-    scene.waitingReport = null;
-  }
   scene.tweens.add({
     targets: objects, alpha: 0, duration: 500, ease: 'Sine.easeIn',
     onComplete: () => objects.forEach(obj => obj.destroy()),
