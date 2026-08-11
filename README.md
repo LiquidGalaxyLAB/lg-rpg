@@ -15,13 +15,13 @@ A real-time multiplayer RPG built for [Liquid Galaxy](https://www.liquidgalaxy.e
 
 ```
         ┌──────────────────────────────────────────┐
-        │          Liquid Galaxy (Ubuntu VM)        │
-        │                                           │
+        │          Liquid Galaxy (Ubuntu VM)       │
+        │                                          │
         │  ┌──────────────┐   ┌───────────────────┐│
         │  │  Node.js     │◄──│  Chromium         ││
         │  │  Server :8111│   │  (across screens) ││
         │  └──────┬───────┘   └───────────────────┘│
-        └─────────┼──────────────────────────────────┘
+        └─────────┼────────────────────────────────┘
                   │ Socket.IO (WebSocket)
         ┌─────────┴──────────┐
         │   Flutter App      │  ← Android phone
