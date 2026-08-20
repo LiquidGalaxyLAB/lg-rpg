@@ -36,3 +36,17 @@ Third-party assets used by the project, grouped by license. Paths are relative t
 - **Ninja Jail Castle whatever Platformer Tiles** by R3tr0BoiDX
   - Source: https://opengameart.org/content/ninja-jail-castle-whatever-platformer-tiles
   - Used for: the wall tileset in both PvP maps (`maps/shared_assets/pvp/wall.png`)
+
+---
+
+## Licensing summary
+
+The project's own source code is MIT licensed (see [LICENSE](./LICENSE)). Everything
+listed above is third-party work under its own license and is **not** covered by MIT:
+
+- **CC BY 4.0** assets may be reused and modified, but require credit to the original
+  artist and a note that changes were made.
+- **CC0 1.0** assets are in the public domain and carry no attribution requirement —
+  they are credited here anyway.
+
+If you fork this project, keep this file (or an equivalent credits page) with it.
