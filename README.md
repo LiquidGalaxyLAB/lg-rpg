@@ -155,3 +155,13 @@ live on the master in `~/lg-rpg-server/logs/`. For known issues and fixes, see
 This project uses pixel-art assets created by independent artists under open licenses.
 
 See **[CREDITS.md](./CREDITS.md)** for the full list of contributors, asset links, and license details.
+
+---
+
+## License
+
+The **code** in this repository is released under the [MIT License](./LICENSE).
+
+The **assets** (sprites, tilesets, music, sound effects) are not MIT — they belong to their original
+artists and stay under their own licenses (CC BY 4.0 and CC0 1.0). Attribution
+is required where the license says so; see [CREDITS.md](./CREDITS.md).

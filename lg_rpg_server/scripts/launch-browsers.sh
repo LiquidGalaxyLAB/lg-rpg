@@ -18,9 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Launching browsers on LG displays | Screens: $TOTAL_SCREENS | IP: $SERVER_IP:$PORT"
 
-# Physical left-to-right layout (LG convention, matches the controller app):
-#   leftmost = floor(N/2)+2 ... N, then master 1 (centre), then 2 ... floor(N/2)+1 = rightmost.
-#   e.g. N=3 -> 3 1 2  (leftmost 3, rightmost 2); N=5 -> 4 5 1 2 3  (leftmost 4, rightmost 3).
+
 HALF=$((TOTAL_SCREENS / 2))
 PHYSICAL_SCREENS=()
 for ((i=HALF+2; i<=TOTAL_SCREENS; i++)); do   # left block: leftmost -> centre
